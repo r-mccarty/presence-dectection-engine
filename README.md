@@ -1,7 +1,7 @@
 # HA Bed Presence Detector
 
-[![Compile Firmware](https://github.com/your-username/ha-bed-presence/actions/workflows/compile_firmware.yml/badge.svg)](https://github.com/your-username/ha-bed-presence/actions/workflows/compile_firmware.yml)
-[![Lint YAML](https://github.com/your-username/ha-bed-presence/actions/workflows/lint_yaml.yml/badge.svg)](https://github.com/your-username/ha-bed-presence/actions/workflows/lint_yaml.yml)
+[![Compile Firmware](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml/badge.svg)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml)
+[![Lint YAML](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml/badge.svg)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml)
 
 A high-reliability, tunable, and transparent bed-presence detection solution for Home Assistant. This project uses an ESP32 microcontroller and an LD2410 mmWave radar sensor to provide rock-solid presence data.
 
@@ -9,23 +9,28 @@ The core of this project is a sophisticated on-device presence engine that runs 
 
 ## Development Status
 
-**Current Status:** Repository scaffolded and ready for development
+⚠️ **Current Status:** Initial Framework - Not Yet Hardware Tested
 
-The complete repository structure has been created with:
-- ✅ ESPHome custom component framework (C++ presence engine)
-- ✅ Modular ESPHome configuration using packages
-- ✅ Home Assistant dashboard and automation blueprints
-- ✅ CI/CD workflows for firmware compilation and YAML linting
-- ✅ C++ unit test structure
-- ✅ E2E test framework
-- ✅ Documentation structure
+This repository contains a complete development framework with:
+- ✅ **ESPHome Custom Component**: C++ presence engine with 4-state machine (vacant/debouncing/occupied)
+- ✅ **Modular Configuration**: ESPHome packages for hardware, presence engine, calibration, and diagnostics
+- ✅ **Home Assistant Integration**: Dashboard, automation blueprints, and calibration wizard helpers
+- ✅ **CI/CD Workflows**: Automated firmware compilation and YAML validation
+- ✅ **Testing Infrastructure**: C++ unit test structure and E2E test framework
+- ✅ **Documentation**: Quickstart, calibration guide, troubleshooting, and FAQ
+- ✅ **Dev Environment**: GitHub Codespaces with all dependencies pre-configured
 
-**Next Steps:**
-- Complete C++ unit test implementation with ESPHome framework mocking
-- Implement calibration logic in ESPHome services
-- Add Home Assistant WebSocket client library for E2E tests
-- Test with actual hardware (M5Stack + LD2410 sensor)
-- Create 3D printable mounting solutions
+**Important Notes:**
+- The C++ unit tests are structural placeholders and need full implementation with ESPHome framework mocking
+- Calibration services need algorithm implementation for threshold calculation
+- E2E tests require a Home Assistant WebSocket client library (see `tests/e2e/requirements.txt`)
+- Hardware files (STL mounts, wiring diagrams) are placeholders
+- **This code has not been tested with actual hardware yet**
+
+**Ready to Contribute?**
+- The architecture and interfaces are defined and ready for implementation
+- Start with C++ unit tests or calibration algorithm
+- Hardware testers needed for M5Stack + LD2410 validation
 
 ## Key Features
 
@@ -60,7 +65,7 @@ This is a monorepo containing all artifacts for the project.
 
 This repository is pre-configured for **GitHub Codespaces**.
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=YOUR_REPO_ID_HERE)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/r-mccarty/bed-presence-sensor)
 
 When you launch the Codespace, the `.devcontainer/devcontainer.json` configuration will automatically install and set up all required tools:
 *   **ESPHome** (Command Line Interface)

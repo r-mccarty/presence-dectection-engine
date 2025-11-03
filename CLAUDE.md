@@ -155,8 +155,137 @@ Create `esphome/secrets.yaml` from `esphome/secrets.yaml.example` before compili
 - `compile_firmware.yml` - Validates ESPHome compilation and runs C++ unit tests on every push to esphome/
 - `lint_yaml.yml` - Validates YAML syntax across the repository
 
-### Known Limitations
+## Current Implementation Status
 
-- E2E tests require a Home Assistant WebSocket client library (currently placeholder in requirements.txt)
-- C++ unit tests are structural placeholders - full test implementation requires mocking ESPHome framework
-- Hardware mounting solutions are placeholder STL files
+### ✅ Completed Components
+
+1. **ESPHome Custom Component**: Full C++ implementation in `esphome/custom_components/bed_presence_engine/`
+   - State machine logic with 4 states
+   - Hysteresis-based threshold comparison
+   - Temporal debouncing with configurable timers
+   - State transition reason tracking
+   - Dynamic threshold/debounce updates via lambdas
+
+2. **ESPHome Configuration**: Complete modular YAML configuration
+   - Main entry point: `bed-presence-detector.yaml`
+   - Four packages: hardware, presence engine, calibration services, diagnostics
+   - Number entities for runtime tuning
+   - Basic calibration service placeholders
+
+3. **Home Assistant Integration**: Full UI and automation support
+   - Lovelace dashboard with 4 views (Status, Configuration, Calibration Wizard, Diagnostics)
+   - Automation blueprint for presence events
+   - Helper configuration for calibration workflow
+
+4. **Development Infrastructure**
+   - GitHub Codespaces devcontainer with auto-setup
+   - CI/CD workflows for firmware compilation and YAML linting
+   - Comprehensive documentation
+
+### ⚠️ Needs Implementation
+
+1. **C++ Unit Tests** (`esphome/test/test_presence_engine.cpp`)
+   - Currently structural placeholders
+   - Need to mock ESPHome framework (Component, BinarySensor, Sensor, TextSensor, millis())
+   - Should test all state transitions, debounce logic, and hysteresis behavior
+
+2. **Calibration Algorithm** (`esphome/packages/services_calibration.yaml`)
+   - Services are defined but logic is placeholder
+   - Need to implement energy value sampling during calibration periods
+   - Calculate optimal thresholds with safety margins from collected data
+
+3. **E2E Tests** (`tests/e2e/test_calibration_flow.py`)
+   - Framework is in place but missing Home Assistant WebSocket client library
+   - Add dependency: Consider `homeassistant-api`, `python-homeassistant`, or raw `websockets`
+   - Update `tests/e2e/requirements.txt` with chosen library
+
+4. **Hardware Assets**
+   - `hardware/mounts/m5stack_side_mount.stl` - placeholder, needs actual 3D model
+   - `docs/assets/wiring_diagram.png` - placeholder, needs actual diagram
+   - `docs/assets/demo.gif` - placeholder, needs demo recording
+
+### 🔧 Hardware Not Tested
+
+**This codebase has NOT been tested with actual hardware.** Before deploying:
+1. Verify LD2410 sensor UART configuration (TX/RX pins, baud rate)
+2. Test M5Stack GPIO pin assignments
+3. Validate energy value ranges from LD2410 (thresholds may need adjustment)
+4. Confirm state transitions work reliably in real-world conditions
+
+## Key Files Reference
+
+### Critical Files for Development
+
+- `esphome/custom_components/bed_presence_engine/bed_presence.cpp` - Core state machine logic
+- `esphome/packages/presence_engine.yaml` - Threshold/debounce entities and update lambdas
+- `esphome/packages/services_calibration.yaml` - Calibration service definitions
+- `homeassistant/dashboards/bed_presence_dashboard.yaml` - User interface
+- `homeassistant/configuration_helpers.yaml.example` - Required HA helpers
+
+### Files Safe to Modify
+
+- Threshold defaults in `esphome/packages/presence_engine.yaml`
+- Debounce timer defaults in `esphome/packages/presence_engine.yaml`
+- GPIO pins in `esphome/packages/hardware_m5stack_ld2410.yaml` (for different boards)
+- Dashboard layout in `homeassistant/dashboards/bed_presence_dashboard.yaml`
+
+### Files Requiring Careful Changes
+
+- `esphome/custom_components/bed_presence_engine/__init__.py` - ESPHome component schema
+- `esphome/custom_components/bed_presence_engine/bed_presence.h` - Public API and state enum
+- State machine logic in `bed_presence.cpp` - Changes affect reliability
+
+## Common Development Tasks
+
+### Adding a New Configurable Parameter
+
+1. Add to `__init__.py` CONFIG_SCHEMA with validation
+2. Add setter method in `bed_presence.h`
+3. Store as member variable in `bed_presence.h`
+4. Use in logic in `bed_presence.cpp`
+5. Add number entity in `presence_engine.yaml` with on_value lambda
+
+### Implementing Calibration Logic
+
+1. Add member variables to store calibration samples in `bed_presence.h`
+2. Implement sampling logic in `start_calibration` service
+3. Calculate thresholds in `stop_calibration` service
+4. Consider: min/max tracking, outlier filtering, safety margins
+5. Update number entities via `id(entity_name).publish_state(value)`
+
+### Testing State Transitions Locally
+
+Without hardware, you can:
+1. Mock the energy sensor in C++ unit tests
+2. Advance mock time with `advance_time()` function
+3. Verify state transitions and published states
+4. Test edge cases (energy drops during debounce, rapid changes, etc.)
+
+## Troubleshooting
+
+### ESPHome Compilation Errors
+
+**Error**: "ld2410 platform not found"
+- **Fix**: ESPHome may not have LD2410 support in your version. Check ESPHome version or implement custom UART communication.
+
+**Error**: "bed_presence_engine not found"
+- **Fix**: Ensure `custom_components/bed_presence_engine/` is in same directory as YAML file or use `external_components`
+
+### PlatformIO Test Errors
+
+**Error**: "esphome/core/component.h: No such file"
+- **Fix**: Unit tests need ESPHome framework mocking. Current tests are structural only.
+
+**Error**: "undefined reference to millis()"
+- **Fix**: Mock `millis()` in test file (already defined in `test_presence_engine.cpp`)
+
+### Home Assistant Integration Issues
+
+**Error**: Device not auto-discovered
+- **Fix**: Check Wi-Fi credentials in `secrets.yaml`, verify HA is on same network, check ESPHome logs
+
+**Error**: Number entities not showing
+- **Fix**: Verify device is connected, check entity IDs match dashboard YAML
+
+**Error**: Services not available
+- **Fix**: Ensure device firmware includes `services_calibration.yaml` package
