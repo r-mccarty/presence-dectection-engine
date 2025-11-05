@@ -4,27 +4,83 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a bed presence detection system for Home Assistant using an ESP32 microcontroller and LD2410 mmWave radar sensor. The project features:
+This is a bed presence detection system for Home Assistant using an ESP32 microcontroller and LD2410 mmWave radar sensor. The project implements a **3-phase development roadmap** defined in `docs/presence-engine-spec.md`.
 
-- **On-device presence engine** running on ESP32 (C++ custom component)
-- **Stateful filtering** with temporal debouncing and hysteresis
-- **Home Assistant integration** with calibration wizard and operator dashboard
-- **End-to-end testing** via C++ unit tests and Python E2E tests
+**Current Status: Phase 1 Implementation (Z-Score Based Detection)**
+
+The repository contains:
+- **Phase 1 presence engine** - Simple z-score based statistical detection (IMPLEMENTED)
+- **C++ unit tests** - Comprehensive test suite for Phase 1 logic (FULLY IMPLEMENTED)
+- **Home Assistant integration** - Dashboard and blueprints (PARTIALLY COMPLETE - see Known Issues)
+- **Development infrastructure** - CI/CD, Codespaces environment, documentation (COMPLETE)
+
+## Implementation Roadmap
+
+The project follows a 3-phase development plan documented in `docs/presence-engine-spec.md`:
+
+### Phase 1: Z-Score Based Detection ✅ CURRENT IMPLEMENTATION
+- Simple statistical presence detection using z-scores
+- Immediate state transitions (no debouncing - intentionally "twitchy")
+- Hysteresis via separate ON/OFF threshold multipliers (`k_on` > `k_off`)
+- Runtime tunable thresholds via Home Assistant
+- **Status**: Core logic fully implemented and tested
+
+### Phase 2: State Machine + Debouncing ⏳ PLANNED
+- 4-state machine (IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF)
+- Temporal filtering with configurable debounce timers
+- Eliminates false positives/negatives from Phase 1
+- **Status**: Not yet implemented
+
+### Phase 3: Calibration + Environmental Hardening ⏳ PLANNED
+- Automated baseline calibration via Home Assistant services
+- Distance windowing to ignore specific zones
+- MAD (Median Absolute Deviation) statistical analysis
+- **Status**: Service stubs exist but no implementation
 
 ## Monorepo Structure
 
-The repository is organized into distinct subsystems:
-
-- `esphome/` - ESP32 firmware (ESPHome YAML + C++ custom components)
-  - `custom_components/` - Core C++ presence engine
-  - `packages/` - Reusable ESPHome YAML modules
-  - `test/` - C++ unit tests using PlatformIO
-- `homeassistant/` - Home Assistant configuration
-  - `blueprints/` - Automation blueprints
-  - `dashboards/` - Lovelace dashboard YAML
-- `tests/e2e/` - Python-based integration tests
-- `hardware/` - CAD files for 3D printable parts
-- `docs/` - User-facing documentation
+```
+/workspaces/bed-presence-sensor/
+├── esphome/                      # ESP32 firmware
+│   ├── custom_components/
+│   │   └── bed_presence_engine/  # Phase 1 C++ implementation
+│   │       ├── __init__.py       # ESPHome component registration
+│   │       ├── binary_sensor.py  # ESPHome config schema
+│   │       ├── bed_presence.h    # C++ header (z-score logic)
+│   │       └── bed_presence.cpp  # C++ implementation (96 lines)
+│   ├── packages/                 # Modular YAML configuration
+│   │   ├── hardware_m5stack_ld2410.yaml    # UART, GPIO, LD2410 sensor
+│   │   ├── presence_engine.yaml            # k_on/k_off entities
+│   │   ├── services_calibration.yaml       # Placeholder services
+│   │   └── diagnostics.yaml                # Device health sensors
+│   ├── test/
+│   │   └── test_presence_engine.cpp        # 14 comprehensive unit tests (219 lines)
+│   ├── bed-presence-detector.yaml          # Main ESPHome entry point
+│   ├── platformio.ini                      # PlatformIO test configuration
+│   └── secrets.yaml.example                # Template for WiFi credentials
+├── homeassistant/                # Home Assistant configuration
+│   ├── blueprints/automation/
+│   │   └── bed_presence_automation.yaml    # Automation blueprint
+│   ├── dashboards/
+│   │   └── bed_presence_dashboard.yaml     # 4-view Lovelace dashboard
+│   └── configuration_helpers.yaml.example  # Required helper entities
+├── tests/e2e/                    # Python E2E tests
+│   ├── test_calibration_flow.py            # 9 test functions (INCOMPLETE)
+│   └── requirements.txt                    # MISSING hass_ws dependency
+├── docs/                         # Documentation
+│   ├── presence-engine-spec.md             # **SOURCE OF TRUTH** - 3-phase spec
+│   ├── phase1-hardware-setup.md            # Hardware setup guide for Phase 1
+│   ├── quickstart.md, calibration.md, faq.md, troubleshooting.md
+│   └── assets/                             # EMPTY placeholder files (0 bytes)
+├── hardware/mounts/              # 3D printable parts
+│   └── m5stack_side_mount.stl              # EMPTY placeholder (0 bytes)
+├── .github/workflows/            # CI/CD
+│   ├── compile_firmware.yml                # ESPHome compile + PlatformIO tests
+│   └── lint_yaml.yml                       # YAML validation
+└── .devcontainer/                # GitHub Codespaces setup
+    ├── devcontainer.json                   # Auto-installs tools
+    └── Dockerfile                          # Python 3.11 + Claude CLI
+```
 
 ## Development Commands
 
@@ -36,11 +92,12 @@ cd esphome
 esphome compile bed-presence-detector.yaml
 ```
 
-**Run C++ unit tests:**
+**Run C++ unit tests (fully implemented):**
 ```bash
 cd esphome
 platformio test -e native
 ```
+14 tests covering z-score calculation, state transitions, hysteresis, edge cases.
 
 **Flash to device:**
 ```bash
@@ -48,244 +105,597 @@ cd esphome
 esphome run bed-presence-detector.yaml
 ```
 
-### End-to-End Tests (run from `tests/e2e/` directory)
+### End-to-End Tests (INCOMPLETE - see Known Issues)
 
-**Install dependencies:**
 ```bash
 cd tests/e2e
-pip install -r requirements.txt
-```
-
-**Run tests:**
-```bash
+pip install -r requirements.txt  # Missing hass_ws dependency
 export HA_URL="ws://your-ha-instance:8123/api/websocket"
 export HA_TOKEN="your-long-lived-access-token"
 pytest
 ```
 
+## Phase 1 Implementation Details
+
+### Core Algorithm (bed_presence.cpp:47-77)
+
+The Phase 1 presence engine implements simple z-score based detection:
+
+1. **Input**: `ld2410_still_energy` sensor value
+2. **Z-Score Calculation**: `z = (energy - μ) / σ`
+   - Hardcoded baseline statistics: `μ_move_ = 100.0`, `σ_move_ = 20.0` (placeholders in code)
+   - **IMPORTANT**: These values need manual calibration per `docs/phase1-hardware-setup.md`
+3. **Threshold Comparison with Hysteresis**:
+   - Turn ON when `z > k_on` (default: 4.0)
+   - Turn OFF when `z < k_off` (default: 2.0)
+   - Hysteresis zone: `k_off < z < k_on` (state remains unchanged)
+4. **Immediate State Changes**: No temporal debouncing (this is Phase 1 behavior)
+
+### Class Structure (bed_presence.h:20-62)
+
+```cpp
+class BedPresenceEngine : public Component, public binary_sensor::BinarySensor {
+  // Configuration (set from ESPHome YAML)
+  float k_on_{4.0f};   // ON threshold multiplier
+  float k_off_{2.0f};  // OFF threshold multiplier
+
+  // Hardcoded baseline (user must update these after baseline collection)
+  float mu_move_{100.0f};    // Mean moving energy
+  float sigma_move_{20.0f};  // Std dev moving energy
+
+  // Simple boolean state (NO state machine in Phase 1)
+  bool is_occupied_{false};
+
+  // Runtime updaters called from Home Assistant
+  void update_k_on(float k);
+  void update_k_off(float k);
+};
+```
+
+**Phase 1 Characteristics:**
+- ✅ Z-score normalization for statistical significance
+- ✅ Hysteresis to prevent rapid oscillation
+- ✅ Runtime tunable thresholds
+- ✅ State reason tracking
+- ❌ NO state machine enum (just boolean `is_occupied_`)
+- ❌ NO debounce timers (changes are immediate)
+- ❌ NO temporal filtering
+
+### ESPHome Configuration (presence_engine.yaml)
+
+**Entities exposed to Home Assistant:**
+
+```yaml
+binary_sensor:
+  - platform: bed_presence_engine
+    name: "Bed Occupied"                    # binary_sensor.bed_occupied
+    id: bed_occupied
+    k_on: 4.0
+    k_off: 2.0
+    state_reason:
+      name: "Presence State Reason"         # text_sensor.presence_state_reason
+      id: presence_state_reason             # Shows z-score values
+
+number:
+  - platform: template
+    name: "k_on (ON Threshold Multiplier)"  # number.k_on_on_threshold_multiplier
+    id: k_on_input
+    min_value: 0.0
+    max_value: 10.0
+    step: 0.1
+    initial_value: 4.0
+    restore_value: true                      # Persists across reboots
+
+  - platform: template
+    name: "k_off (OFF Threshold Multiplier)" # number.k_off_off_threshold_multiplier
+    id: k_off_input
+    min_value: 0.0
+    max_value: 10.0
+    step: 0.1
+    initial_value: 2.0
+    restore_value: true
+```
+
+**Note**: Entity names in Phase 1 are `k_on` and `k_off`, NOT `occupied_threshold` or `vacant_threshold`.
+
+## C++ Unit Tests Status
+
+**Location**: `esphome/test/test_presence_engine.cpp`
+
+**Status**: ✅ FULLY IMPLEMENTED (219 lines, 14 test cases)
+
+The tests create a `SimplePresenceEngine` class that replicates Phase 1 logic without ESPHome dependencies. All tests pass and validate:
+
+- ✅ Z-score calculation accuracy
+- ✅ Initial state (vacant)
+- ✅ Transitions to occupied when `z > k_on`
+- ✅ Transitions to vacant when `z < k_off`
+- ✅ Hysteresis behavior (state remains in hysteresis zone)
+- ✅ No debouncing (immediate transitions)
+- ✅ Dynamic threshold updates (`update_k_on()`, `update_k_off()`)
+- ✅ State reason tracking
+- ✅ Edge cases (zero sigma, negative energy, very large values)
+
+**Run tests**: `cd esphome && platformio test -e native`
+
+**CORRECTION**: The current CLAUDE.md incorrectly states these tests are "structural placeholders". They are fully functional.
+
+## Known Issues & Discrepancies
+
+### 1. Home Assistant Dashboard Entity Mismatches
+
+**File**: `homeassistant/dashboards/bed_presence_dashboard.yaml`
+
+**Problem**: Dashboard references entities that don't exist or have wrong names.
+
+**Configuration View (lines 60-73)** references:
+- ❌ `number.occupied_threshold` (does not exist)
+- ❌ `number.vacant_threshold` (does not exist)
+- ❌ `number.debounce_occupied_ms` (Phase 2 feature, not implemented)
+- ❌ `number.debounce_vacant_ms` (Phase 2 feature, not implemented)
+
+**Should reference**:
+- ✅ `number.k_on_on_threshold_multiplier`
+- ✅ `number.k_off_off_threshold_multiplier`
+
+**Threshold Visualization (lines 42-51)** references:
+- ❌ `number.occupied_threshold`
+- ❌ `number.vacant_threshold`
+
+**Should reference**:
+- ✅ `number.k_on_on_threshold_multiplier`
+- ✅ `number.k_off_off_threshold_multiplier`
+
+### 2. E2E Tests Missing Dependency
+
+**File**: `tests/e2e/test_calibration_flow.py`
+
+**Problem**: Imports `hass_ws.HomeAssistantClient` but `hass_ws` is not in `requirements.txt`.
+
+**Line 15**: `from hass_ws import HomeAssistantClient`
+
+**requirements.txt** only has:
+```
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+# TODO: Add the correct Home Assistant API library
+```
+
+**Fix options**:
+1. Add a Home Assistant WebSocket library (e.g., `python-homeassistant-ws`, `homeassistant-api`)
+2. Update test code to match chosen library's API
+3. Tests also reference wrong entity names (see issue #1)
+
+### 3. Calibration Services Are Placeholders
+
+**File**: `esphome/packages/services_calibration.yaml`
+
+**Status**: Services are defined and callable, but implementation just logs messages.
+
+```yaml
+esphome:
+  on_boot:
+    - lambda: |-
+        // TODO Phase 3: Implement actual baseline data collection
+        // TODO Phase 3: Implement MAD-based threshold calculation
+```
+
+**Available services**:
+- `esphome.bed_presence_detector_start_calibration` (placeholder)
+- `esphome.bed_presence_detector_stop_calibration` (placeholder)
+- `esphome.bed_presence_detector_reset_to_defaults` (functional - resets k_on/k_off to 4.0/2.0)
+
+### 4. Hardware Assets Are Empty Placeholders
+
+**Files** (all 0 bytes):
+- `hardware/mounts/m5stack_side_mount.stl`
+- `docs/assets/wiring_diagram.png`
+- `docs/assets/demo.gif`
+
+### 5. Hardware Not Yet Tested
+
+**The firmware compiles successfully but has NOT been tested with actual hardware.**
+
+Before deploying:
+1. Update hardcoded baseline statistics in `bed_presence.h` (lines 43-46) after baseline collection
+2. Follow `docs/phase1-hardware-setup.md` for baseline data collection procedure
+3. Verify LD2410 sensor UART configuration (GPIO16/17, 256000 baud)
+4. Test that energy values from LD2410 are in expected range
+
 ## Development Workflow
 
-1. **Phase 1: Firmware Development**
-   - Work in `esphome/` directory
-   - Compile firmware with `esphome compile` to validate syntax
-   - Run `platformio test -e native` for fast C++ unit test feedback
-   - Only flash to device after compilation and tests pass
+### 1. Firmware Development (Fastest Iteration)
 
-2. **Phase 2: Home Assistant Configuration**
-   - Deploy dashboard from `homeassistant/dashboards/`
-   - Deploy blueprints from `homeassistant/blueprints/`
-   - Create required helpers per `homeassistant/configuration_helpers.yaml.example`
+```bash
+cd esphome
+esphome compile bed-presence-detector.yaml  # Validate syntax
+platformio test -e native                   # Run unit tests (fast, no hardware)
+```
 
-3. **Phase 3: Integration Testing**
-   - Run E2E tests from `tests/e2e/` with live Home Assistant instance
-   - Requires configured device and HA credentials
+**Only after tests pass:**
+```bash
+esphome run bed-presence-detector.yaml      # Flash to device
+```
 
-## Key Architecture Concepts
+### 2. Home Assistant Configuration
 
-### Presence Engine Design
+**Prerequisites**:
+- ESPHome device successfully connected to Home Assistant
+- Device appears in Settings → Devices & Services → ESPHome
 
-The core presence detection logic runs entirely on the ESP32 as a C++ custom component. This ensures:
-- Fast response times (no Wi-Fi dependency)
-- High reliability (continues functioning if Home Assistant is down)
-- Sophisticated state machine with debouncing to prevent flapping
+**Deploy dashboard**:
+1. Copy `homeassistant/dashboards/bed_presence_dashboard.yaml` content
+2. Settings → Dashboards → Add Dashboard → Create new dashboard
+3. Edit Dashboard → Raw Configuration Editor → Paste YAML
+4. **IMPORTANT**: Fix entity names first (see Known Issues #1)
 
-The engine processes mmWave radar data through:
-1. Threshold comparison (configurable via Home Assistant)
-2. Temporal debouncing (configurable delay timers)
-3. Hysteresis to prevent oscillation
-4. State machine transitions with reason tracking
+**Deploy automation blueprint**:
+1. Copy `homeassistant/blueprints/automation/bed_presence_automation.yaml`
+2. Place in `<config>/blueprints/automation/` directory
+3. Settings → Automations & Scenes → Create Automation → Use Blueprint
 
-### Home Assistant Integration
+### 3. Integration Testing
 
-The Home Assistant side provides:
-- **Calibration Wizard**: Guided UI flow using Home Assistant helpers and scripts
-- **Operator Dashboard**: Live visualization of sensor values, thresholds, and state reasons
-- **Configuration Interface**: Exposes tunable parameters (thresholds, debounce timers) as entities
+**Prerequisites**:
+- Fix E2E test dependencies (see Known Issues #2)
+- Live Home Assistant instance with device connected
+- Long-lived access token
 
-## Testing Strategy
-
-- **C++ Unit Tests**: Test presence engine state machine logic in isolation (fast, no hardware required)
-- **ESPHome Compilation**: Validates YAML configuration and C++ compilation (catches syntax errors)
-- **E2E Integration Tests**: Verify full system integration with live Home Assistant and device
-
-## Environment Setup
-
-This repository is designed for GitHub Codespaces with automatic environment setup via `.devcontainer/devcontainer.json`:
-- ESPHome CLI
-- PlatformIO (for C++ testing)
-- Python 3 with pytest, yamllint, black
-
-## Important Implementation Details
-
-### ESPHome Custom Component Structure
-
-The custom component is located in `esphome/custom_components/bed_presence_engine/`:
-- `__init__.py` - ESPHome component schema and configuration validation
-- `bed_presence.h` - C++ header defining the BedPresenceEngine class and state machine
-- `bed_presence.cpp` - Implementation of the presence detection logic
-
-The component inherits from both `Component` and `BinarySensor` to integrate with ESPHome's lifecycle.
-
-### State Machine States
-
-The presence engine uses a 4-state machine:
-1. `VACANT` - No presence detected
-2. `DEBOUNCING_OCCUPIED` - Presence signal detected, waiting for confirmation
-3. `OCCUPIED` - Confirmed presence
-4. `DEBOUNCING_VACANT` - Absence signal detected, waiting for confirmation
-
-Hysteresis is implemented via separate thresholds: `occupied_threshold` > `vacant_threshold`.
-
-### ESPHome Package System
-
-Configuration is modularized using ESPHome packages:
-- `hardware_m5stack_ld2410.yaml` - Hardware-specific config (UART, GPIO pins, LD2410 sensor)
-- `presence_engine.yaml` - Presence engine configuration and tuning entities
-- `services_calibration.yaml` - ESPHome services for calibration workflow
-- `diagnostics.yaml` - Device health monitoring sensors
-
-The main entry point `bed-presence-detector.yaml` includes all packages.
-
-### Secrets Management
-
-Create `esphome/secrets.yaml` from `esphome/secrets.yaml.example` before compiling. Never commit the actual secrets file.
-
-### CI/CD Workflows
-
-- `compile_firmware.yml` - Validates ESPHome compilation and runs C++ unit tests on every push to esphome/
-- `lint_yaml.yml` - Validates YAML syntax across the repository
-
-## Current Implementation Status
-
-### ✅ Completed Components
-
-1. **ESPHome Custom Component**: Full C++ implementation in `esphome/custom_components/bed_presence_engine/`
-   - State machine logic with 4 states
-   - Hysteresis-based threshold comparison
-   - Temporal debouncing with configurable timers
-   - State transition reason tracking
-   - Dynamic threshold/debounce updates via lambdas
-
-2. **ESPHome Configuration**: Complete modular YAML configuration
-   - Main entry point: `bed-presence-detector.yaml`
-   - Four packages: hardware, presence engine, calibration services, diagnostics
-   - Number entities for runtime tuning
-   - Basic calibration service placeholders
-
-3. **Home Assistant Integration**: Full UI and automation support
-   - Lovelace dashboard with 4 views (Status, Configuration, Calibration Wizard, Diagnostics)
-   - Automation blueprint for presence events
-   - Helper configuration for calibration workflow
-
-4. **Development Infrastructure**
-   - GitHub Codespaces devcontainer with auto-setup
-   - CI/CD workflows for firmware compilation and YAML linting
-   - Comprehensive documentation
-
-### ⚠️ Needs Implementation
-
-1. **C++ Unit Tests** (`esphome/test/test_presence_engine.cpp`)
-   - Currently structural placeholders
-   - Need to mock ESPHome framework (Component, BinarySensor, Sensor, TextSensor, millis())
-   - Should test all state transitions, debounce logic, and hysteresis behavior
-
-2. **Calibration Algorithm** (`esphome/packages/services_calibration.yaml`)
-   - Services are defined but logic is placeholder
-   - Need to implement energy value sampling during calibration periods
-   - Calculate optimal thresholds with safety margins from collected data
-
-3. **E2E Tests** (`tests/e2e/test_calibration_flow.py`)
-   - Framework is in place but missing Home Assistant WebSocket client library
-   - Add dependency: Consider `homeassistant-api`, `python-homeassistant`, or raw `websockets`
-   - Update `tests/e2e/requirements.txt` with chosen library
-
-4. **Hardware Assets**
-   - `hardware/mounts/m5stack_side_mount.stl` - placeholder, needs actual 3D model
-   - `docs/assets/wiring_diagram.png` - placeholder, needs actual diagram
-   - `docs/assets/demo.gif` - placeholder, needs demo recording
-
-### 🔧 Hardware Not Tested
-
-**This codebase has NOT been tested with actual hardware.** Before deploying:
-1. Verify LD2410 sensor UART configuration (TX/RX pins, baud rate)
-2. Test M5Stack GPIO pin assignments
-3. Validate energy value ranges from LD2410 (thresholds may need adjustment)
-4. Confirm state transitions work reliably in real-world conditions
-
-## Key Files Reference
-
-### Critical Files for Development
-
-- `esphome/custom_components/bed_presence_engine/bed_presence.cpp` - Core state machine logic
-- `esphome/packages/presence_engine.yaml` - Threshold/debounce entities and update lambdas
-- `esphome/packages/services_calibration.yaml` - Calibration service definitions
-- `homeassistant/dashboards/bed_presence_dashboard.yaml` - User interface
-- `homeassistant/configuration_helpers.yaml.example` - Required HA helpers
-
-### Files Safe to Modify
-
-- Threshold defaults in `esphome/packages/presence_engine.yaml`
-- Debounce timer defaults in `esphome/packages/presence_engine.yaml`
-- GPIO pins in `esphome/packages/hardware_m5stack_ld2410.yaml` (for different boards)
-- Dashboard layout in `homeassistant/dashboards/bed_presence_dashboard.yaml`
-
-### Files Requiring Careful Changes
-
-- `esphome/custom_components/bed_presence_engine/__init__.py` - ESPHome component schema
-- `esphome/custom_components/bed_presence_engine/bed_presence.h` - Public API and state enum
-- State machine logic in `bed_presence.cpp` - Changes affect reliability
+```bash
+cd tests/e2e
+export HA_URL="ws://homeassistant.local:8123/api/websocket"
+export HA_TOKEN="your-token"
+pytest
+```
 
 ## Common Development Tasks
 
-### Adding a New Configurable Parameter
+### Modifying Phase 1 Thresholds
 
-1. Add to `__init__.py` CONFIG_SCHEMA with validation
-2. Add setter method in `bed_presence.h`
-3. Store as member variable in `bed_presence.h`
-4. Use in logic in `bed_presence.cpp`
-5. Add number entity in `presence_engine.yaml` with on_value lambda
+**Default values** (bed_presence.h:49-50):
+```cpp
+float k_on_{4.0f};   // Turn ON when z > 4.0 (4 std deviations)
+float k_off_{2.0f};  // Turn OFF when z < 2.0 (2 std deviations)
+```
 
-### Implementing Calibration Logic
+**To change defaults**:
+1. Edit `esphome/custom_components/bed_presence_engine/bed_presence.h`
+2. Update `k_on_` and/or `k_off_` values
+3. Also update `initial_value` in `esphome/packages/presence_engine.yaml` (lines 24, 40)
+4. Recompile and flash
 
-1. Add member variables to store calibration samples in `bed_presence.h`
-2. Implement sampling logic in `start_calibration` service
-3. Calculate thresholds in `stop_calibration` service
-4. Consider: min/max tracking, outlier filtering, safety margins
-5. Update number entities via `id(entity_name).publish_state(value)`
+**At runtime** (no reflash needed):
+- Adjust via Home Assistant UI: Settings → Devices → Bed Presence Detector
+- Changes persist across reboots (`restore_value: true`)
 
-### Testing State Transitions Locally
+### Updating Baseline Statistics (Phase 1 Manual Calibration)
 
-Without hardware, you can:
-1. Mock the energy sensor in C++ unit tests
-2. Advance mock time with `advance_time()` function
-3. Verify state transitions and published states
-4. Test edge cases (energy drops during debounce, rapid changes, etc.)
+**Current values** (bed_presence.h:43-46):
+```cpp
+float mu_move_{100.0f};   // Mean moving energy (placeholder)
+float sigma_move_{20.0f}; // Std dev moving energy (placeholder)
+```
+
+**To calibrate**:
+1. Follow `docs/phase1-hardware-setup.md` section "Baseline Data Collection"
+2. Record 30-60 seconds of `ld2410_still_energy` values with empty bed
+3. Calculate mean (μ) and standard deviation (σ)
+4. Update `mu_move_` and `sigma_move_` in `bed_presence.h`
+5. Recompile and flash
+
+**Note**: Phase 3 will automate this process via calibration services.
+
+### Implementing Phase 2 (State Machine + Debouncing)
+
+**Required changes**:
+
+1. **bed_presence.h**: Add state machine enum and timers
+   ```cpp
+   enum State { IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF };
+   State current_state_{IDLE};
+   unsigned long debounce_on_ms_{3000};
+   unsigned long debounce_off_ms_{5000};
+   unsigned long state_change_time_{0};
+   ```
+
+2. **bed_presence.cpp**: Replace immediate transitions with debounce logic
+   - `process_energy_reading()` becomes a state machine
+   - Track time in each debouncing state
+   - Only transition after timer expires
+
+3. **presence_engine.yaml**: Add debounce timer entities
+   ```yaml
+   number:
+     - platform: template
+       name: "Debounce Occupied (ms)"
+       # ... similar to k_on/k_off entities
+   ```
+
+4. **Update dashboard**: Add debounce timer controls (currently references non-existent entities)
+
+5. **Update unit tests**: Add time mocking and test debounce behavior
+
+**Reference**: See `docs/presence-engine-spec.md` Phase 2 requirements.
+
+### Implementing Phase 3 (Automated Calibration)
+
+**Required changes**:
+
+1. **bed_presence.h**: Add calibration state
+   ```cpp
+   bool is_calibrating_{false};
+   std::vector<float> calibration_samples_;
+   unsigned long calibration_start_time_{0};
+   ```
+
+2. **services_calibration.yaml**: Replace placeholder lambdas with:
+   - `start_calibration`: Set `is_calibrating_ = true`, start timer
+   - In `loop()`: Collect energy samples while calibrating
+   - `stop_calibration`: Calculate μ and σ using MAD method, update thresholds
+
+3. **Calculate statistics**: Implement MAD (Median Absolute Deviation) for robust outlier handling
+   ```cpp
+   float median = calculate_median(samples);
+   float mad = calculate_mad(samples, median);
+   float sigma = 1.4826 * mad;  // MAD to std dev conversion
+   ```
+
+4. **Update number entities**: Publish new k_on/k_off values via `id(k_on_input).publish_state(value)`
+
+**Reference**: See `docs/presence-engine-spec.md` Phase 3 requirements.
+
+## Testing Strategy
+
+### Unit Tests (C++ - Fast, No Hardware)
+
+**What they test**: Phase 1 z-score logic in isolation
+
+**Run**: `cd esphome && platformio test -e native`
+
+**When to use**:
+- Verifying algorithm changes
+- Testing edge cases
+- Regression testing during refactoring
+- Fast feedback loop (runs in <5 seconds)
+
+**Coverage**: 14 tests validate all Phase 1 behavior
+
+### ESPHome Compilation (Syntax Check)
+
+**What it tests**: YAML validity, C++ compilation, ESPHome integration
+
+**Run**: `cd esphome && esphome compile bed-presence-detector.yaml`
+
+**When to use**:
+- After modifying YAML configuration
+- After changing C++ component code
+- Before flashing to device
+- CI/CD validation
+
+### E2E Integration Tests (Python - Requires Hardware)
+
+**What they test**: Full system integration with live Home Assistant
+
+**Run**: `cd tests/e2e && pytest` (after fixing dependencies)
+
+**When to use**:
+- Verifying Home Assistant integration
+- Testing calibration workflows
+- Validating entity names and services
+- Acceptance testing
+
+**Status**: Framework exists but incomplete (see Known Issues #2)
+
+### Manual Testing with Hardware
+
+**Required for**:
+- Validating actual LD2410 sensor readings
+- Testing presence detection accuracy
+- Calibrating baseline statistics
+- Real-world reliability testing
+
+**Follow**: `docs/phase1-hardware-setup.md` for testing procedures
+
+## CI/CD Workflows
+
+### compile_firmware.yml (Functional)
+
+**Triggers**: Push/PR to main affecting `esphome/**`
+
+**Jobs**:
+1. **compile**: Installs ESPHome, compiles `bed-presence-detector.yaml`
+2. **test**: Installs PlatformIO, runs `platformio test -e native`
+
+**Status**: ✅ Both jobs functional and passing
+
+### lint_yaml.yml (Functional)
+
+**Triggers**: Push/PR to main
+
+**Jobs**: Runs `yamllint` on `esphome/` and `homeassistant/` directories
+
+**Status**: ✅ Functional
+
+## Environment Setup
+
+### GitHub Codespaces (Recommended)
+
+**Setup**: Automatic via `.devcontainer/devcontainer.json`
+
+**Includes**:
+- Python 3.11
+- ESPHome CLI
+- PlatformIO
+- pytest, pytest-asyncio
+- yamllint, black
+- Claude CLI
+
+**Launch**: Click "Code" → "Codespaces" → "Create codespace on main"
+
+### Local Development
+
+**Requirements**:
+- Python 3.11+
+- pip
+
+**Install tools**:
+```bash
+pip install esphome platformio pytest pytest-asyncio yamllint black
+```
+
+## Secrets Management
+
+**File**: `esphome/secrets.yaml` (gitignored)
+
+**Create from template**:
+```bash
+cd esphome
+cp secrets.yaml.example secrets.yaml
+```
+
+**Edit** `secrets.yaml`:
+```yaml
+wifi_ssid: "YourWiFiNetwork"
+wifi_password: "YourWiFiPassword"
+api_encryption_key: "generate-with-esphome-wizard"
+ota_password: "generate-with-esphome-wizard"
+```
+
+**Never commit** `secrets.yaml` to git.
+
+## Key Files Reference
+
+### Critical Files for Phase 1 Development
+
+- `docs/presence-engine-spec.md` - **SOURCE OF TRUTH** for 3-phase roadmap
+- `esphome/custom_components/bed_presence_engine/bed_presence.cpp` - Core z-score logic (96 lines)
+- `esphome/custom_components/bed_presence_engine/bed_presence.h` - Class definition (66 lines)
+- `esphome/packages/presence_engine.yaml` - k_on/k_off entities and lambdas
+- `esphome/test/test_presence_engine.cpp` - Unit tests (219 lines, 14 tests)
+
+### Files Needing Updates (Known Issues)
+
+- `homeassistant/dashboards/bed_presence_dashboard.yaml` - Fix entity names (lines 42-51, 60-73)
+- `tests/e2e/requirements.txt` - Add Home Assistant WebSocket library
+- `tests/e2e/test_calibration_flow.py` - Fix entity names and library import
+
+### Placeholder Files (Empty - 0 bytes)
+
+- `hardware/mounts/m5stack_side_mount.stl`
+- `docs/assets/wiring_diagram.png`
+- `docs/assets/demo.gif`
+
+### Files Safe to Modify
+
+- Threshold defaults: `bed_presence.h` (lines 49-50), `presence_engine.yaml` (lines 24, 40)
+- GPIO pins: `packages/hardware_m5stack_ld2410.yaml` (for different boards)
+- Baseline statistics: `bed_presence.h` (lines 43-46) - update after calibration
+- Dashboard layout: `bed_presence_dashboard.yaml` (after fixing entity names)
+
+### Files Requiring Careful Changes
+
+- `bed_presence.cpp` - Core presence detection logic
+- `binary_sensor.py` - ESPHome component schema (breaking changes affect YAML config)
+- `__init__.py` - Component registration (only change for Phase 2/3 features)
 
 ## Troubleshooting
 
 ### ESPHome Compilation Errors
 
-**Error**: "ld2410 platform not found"
-- **Fix**: ESPHome may not have LD2410 support in your version. Check ESPHome version or implement custom UART communication.
+**Error**: `Platform 'bed_presence_engine' not found`
+- **Cause**: ESPHome can't find custom component
+- **Fix**: Ensure `custom_components/bed_presence_engine/` is in `esphome/` directory
+- **Verify**: `ls esphome/custom_components/bed_presence_engine/` shows 4 files
 
-**Error**: "bed_presence_engine not found"
-- **Fix**: Ensure `custom_components/bed_presence_engine/` is in same directory as YAML file or use `external_components`
+**Error**: `'ld2410_still_energy' not found`
+- **Cause**: LD2410 sensor not properly configured
+- **Fix**: Check `packages/hardware_m5stack_ld2410.yaml` has `sensor:` section with `ld2410_still_energy`
 
 ### PlatformIO Test Errors
 
-**Error**: "esphome/core/component.h: No such file"
-- **Fix**: Unit tests need ESPHome framework mocking. Current tests are structural only.
+**Error**: `No tests found`
+- **Cause**: Test file not detected
+- **Fix**: Ensure `test/test_presence_engine.cpp` exists
+- **Verify**: `platformio test -e native --list-tests` shows tests
 
-**Error**: "undefined reference to millis()"
-- **Fix**: Mock `millis()` in test file (already defined in `test_presence_engine.cpp`)
+**Error**: `Assertion failed`
+- **Cause**: Unit test logic failure (indicates code bug)
+- **Fix**: Read test output to identify which test failed and why
+- **Debug**: Add printf statements in `SimplePresenceEngine` class
 
 ### Home Assistant Integration Issues
 
+**Error**: `Entity not found: number.occupied_threshold`
+- **Cause**: Dashboard uses wrong entity names (see Known Issues #1)
+- **Fix**: Replace with `number.k_on_on_threshold_multiplier`
+
 **Error**: Device not auto-discovered
-- **Fix**: Check Wi-Fi credentials in `secrets.yaml`, verify HA is on same network, check ESPHome logs
+- **Cause**: WiFi/API configuration issue
+- **Fix**: Check `secrets.yaml` credentials, verify same network as HA
+- **Debug**: View ESPHome device logs in HA: Settings → Devices → Bed Presence Detector → Logs
 
-**Error**: Number entities not showing
-- **Fix**: Verify device is connected, check entity IDs match dashboard YAML
+**Error**: Service not available
+- **Cause**: Calibration services are placeholders in Phase 1
+- **Expected**: Services exist but only log messages (Phase 3 will implement)
 
-**Error**: Services not available
-- **Fix**: Ensure device firmware includes `services_calibration.yaml` package
+### Phase 1 Presence Detection Issues
+
+**Problem**: Sensor always reports vacant
+- **Cause**: Baseline statistics (μ, σ) don't match actual sensor readings
+- **Fix**: Follow `docs/phase1-hardware-setup.md` to collect baseline data
+- **Debug**: Check `sensor.ld2410_still_energy` values in HA
+- **Verify**: Calculate z-score manually: `(energy - 100) / 20` should be >4 when occupied
+
+**Problem**: Sensor is "twitchy" (rapid state changes)
+- **Cause**: This is expected Phase 1 behavior (no debouncing)
+- **Fix**: Adjust `k_on`/`k_off` thresholds for wider hysteresis, or implement Phase 2
+
+**Problem**: Sensor doesn't detect presence
+- **Cause**: k_on threshold too high, or baseline incorrect
+- **Fix**: Lower `k_on` via HA UI (try 3.0 or 2.5)
+- **Debug**: Check `text_sensor.presence_state_reason` to see z-score values
+
+## Additional Resources
+
+### Documentation
+
+- `docs/presence-engine-spec.md` - Complete 3-phase engineering specification
+- `docs/phase1-hardware-setup.md` - Hardware wiring and baseline calibration guide
+- `docs/quickstart.md` - User-facing quickstart guide
+- `docs/calibration.md` - Calibration procedures (describes Phase 2/3 features)
+- `docs/troubleshooting.md` - User troubleshooting guide
+- `docs/faq.md` - Frequently asked questions
+
+### External References
+
+- ESPHome Documentation: https://esphome.io
+- LD2410 Component: https://esphome.io/components/sensor/ld2410.html
+- Home Assistant Blueprints: https://www.home-assistant.io/docs/automation/using_blueprints/
+- PlatformIO Testing: https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+
+## Summary of Current State
+
+**What Works**:
+- ✅ Phase 1 z-score presence detection (fully implemented)
+- ✅ C++ unit tests (14 tests, all passing)
+- ✅ ESPHome firmware compilation
+- ✅ Runtime threshold tuning via Home Assistant
+- ✅ CI/CD workflows (compile + test)
+- ✅ GitHub Codespaces development environment
+- ✅ Comprehensive documentation
+
+**What Needs Work**:
+- ⚠️ Home Assistant dashboard entity names (wrong references)
+- ⚠️ E2E tests missing dependency (hass_ws library)
+- ⚠️ Calibration services are placeholders (Phase 3 feature)
+- ⚠️ Hardware assets are empty placeholders (STL, diagrams, demo)
+- ⚠️ Firmware not tested with actual hardware
+- ⚠️ Phase 2 (debouncing) and Phase 3 (auto-calibration) not implemented
+
+**Next Steps**:
+1. Fix dashboard entity names to match actual Phase 1 entities
+2. Test firmware with actual M5Stack + LD2410 hardware
+3. Collect baseline data and update hardcoded statistics
+4. Add Home Assistant WebSocket library to E2E tests
+5. Implement Phase 2 state machine and debouncing
+6. Implement Phase 3 automated calibration
