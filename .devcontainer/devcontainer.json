@@ -7,10 +7,10 @@
     "ghcr.io/devcontainers/features/common-utils:2": {
       "installZsh": true,
       "installOhMyZsh": true,
-      "username": "codespace"
+      "username": "vscode"
     }
   },
-  "remoteUser": "codespace",
+  "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "postCreateCommand": "mkdir -p ~/.config/vscode-dev-containers && touch ~/.config/vscode-dev-containers/first-run-notice-already-displayed && pip install --upgrade pip && pip install esphome platformio pytest pytest-asyncio yamllint black && cd tests/e2e && pip install -r requirements.txt && cd ../..",
   "customizations": {

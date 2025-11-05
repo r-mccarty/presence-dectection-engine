@@ -36,5 +36,12 @@ ENV LANG=en_US.UTF-8 \
 # Allow pip installs to use the user base bin directory.
 ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
 
+# Install claude CLI
+RUN set -eux; \
+    curl -fsSL https://claude.ai/install.sh | bash || true; \
+    if [ -x /root/.local/bin/claude ]; then \
+      install -m 0755 /root/.local/bin/claude /usr/local/bin/claude; \
+    fi
+
 # Keep root as the default build user so features can run elevated.
 # The devcontainer.json will switch to the vscode user at runtime.
