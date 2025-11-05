@@ -1,0 +1,247 @@
+name: Preview Deployment
+
+# Triggers on PR creation/update to create a preview deployment with E2E tests
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+# Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to deploy'
+        required: false
+        type: string
+
+jobs:
+  # Compile firmware to ensure it builds before deployment
+  validate-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ESPHome
+        run: pip install esphome
+
+      - name: Compile ESPHome firmware
+        run: |
+          cd esphome
+          esphome compile bed-presence-detector.yaml
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.event.pull_request.number || github.run_number }}
+          path: esphome/.esphome/build/bed-presence-detector/.pioenvs/*/firmware.bin
+          retention-days: 7
+
+  # Run C++ unit tests
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Run C++ unit tests
+        run: |
+          cd esphome
+          platformio test -e native
+
+  # Deploy to test hardware and run E2E tests
+  # REQUIRES: Self-hosted runner with access to M5Stack and Home Assistant
+  preview-deployment:
+    runs-on: self-hosted
+    needs: [validate-firmware, unit-tests]
+    # Only run if self-hosted runner is available
+    if: success()
+    environment:
+      name: preview-${{ github.event.pull_request.number || github.run_number }}
+      url: ${{ steps.deployment.outputs.dashboard_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install esphome
+          pip install -r tests/e2e/requirements.txt
+
+      - name: Create secrets file
+        run: |
+          cd esphome
+          cat > secrets.yaml <<EOF
+          wifi_ssid: "${{ secrets.PREVIEW_WIFI_SSID }}"
+          wifi_password: "${{ secrets.PREVIEW_WIFI_PASSWORD }}"
+          api_encryption_key: "${{ secrets.PREVIEW_API_KEY }}"
+          ota_password: "${{ secrets.PREVIEW_OTA_PASSWORD }}"
+          EOF
+
+      - name: Deploy ESPHome firmware to M5Stack
+        id: deploy-esphome
+        run: |
+          ./scripts/deploy_esphome.sh \
+            --device "${{ secrets.ESPHOME_DEVICE_HOST }}" \
+            --password "${{ secrets.PREVIEW_OTA_PASSWORD }}" \
+            --config esphome/bed-presence-detector.yaml
+        env:
+          ESPHOME_DEVICE_HOST: ${{ secrets.ESPHOME_DEVICE_HOST }}
+
+      - name: Wait for device to come online
+        run: |
+          echo "Waiting for device to boot and connect..."
+          sleep 30
+
+          # Ping test to verify device is reachable
+          timeout=60
+          elapsed=0
+          while ! ping -c 1 "${{ secrets.ESPHOME_DEVICE_HOST }}" > /dev/null 2>&1; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "Device did not come online within ${timeout}s"
+              exit 1
+            fi
+            echo "Waiting for device... (${elapsed}s/${timeout}s)"
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+          echo "Device is online!"
+
+      - name: Deploy Home Assistant configuration
+        id: deploy-ha
+        run: |
+          ./scripts/deploy_homeassistant.sh \
+            --ha-host "${{ secrets.HA_HOST }}" \
+            --ha-token "${{ secrets.HA_TOKEN }}" \
+            --config-path homeassistant/
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+
+      - name: Run E2E tests
+        id: e2e-tests
+        run: |
+          ./scripts/run_e2e_tests.sh \
+            --ha-url "ws://${{ secrets.HA_HOST }}:8123/api/websocket" \
+            --ha-token "${{ secrets.HA_TOKEN }}" \
+            --device-name "bed_presence_detector" \
+            --report-file "e2e-report.xml"
+        env:
+          HA_URL: ws://${{ secrets.HA_HOST }}:8123/api/websocket
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results-${{ github.event.pull_request.number || github.run_number }}
+          path: |
+            e2e-report.xml
+            tests/e2e/*.log
+          retention-days: 14
+
+      - name: Set deployment URL
+        id: deployment
+        run: |
+          echo "dashboard_url=http://${{ secrets.HA_HOST }}:8123/lovelace/bed-presence" >> $GITHUB_OUTPUT
+
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        if: always() && github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const pr_number = context.payload.pull_request.number;
+
+            let testStatus = '${{ steps.e2e-tests.outcome }}';
+            let emoji = testStatus === 'success' ? '✅' : '❌';
+
+            const body = `## ${emoji} Preview Deployment - PR #${pr_number}
+
+            **Deployment Status:** ${testStatus === 'success' ? 'Success' : 'Failed'}
+
+            ### Component Status
+            - **Firmware Compilation:** ✅ Success
+            - **Unit Tests:** ${{ needs.unit-tests.result === 'success' ? '✅ Passed' : '❌ Failed' }}
+            - **ESPHome Deploy:** ${{ steps.deploy-esphome.outcome === 'success' ? '✅ Success' : '❌ Failed' }}
+            - **Home Assistant Deploy:** ${{ steps.deploy-ha.outcome === 'success' ? '✅ Success' : '❌ Failed' }}
+            - **E2E Tests:** ${testStatus === 'success' ? '✅ Passed' : '❌ Failed'}
+
+            ### Preview Environment
+            - **Device:** \`${{ secrets.ESPHOME_DEVICE_HOST }}\`
+            - **Dashboard:** [View Dashboard](${{ steps.deployment.outputs.dashboard_url }})
+            - **Environment:** \`preview-${pr_number}\`
+
+            ### Test Artifacts
+            - [Firmware Binary](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [E2E Test Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ---
+            _This preview deployment will remain active until the PR is closed or a new commit is pushed._`;
+
+            github.rest.issues.createComment({
+              issue_number: pr_number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Cleanup preview environment when PR is closed
+  cleanup-preview:
+    runs-on: self-hosted
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Rollback to main branch configuration
+        run: |
+          echo "Rolling back to main branch configuration..."
+          ./scripts/deploy_esphome.sh \
+            --device "${{ secrets.ESPHOME_DEVICE_HOST }}" \
+            --password "${{ secrets.PREVIEW_OTA_PASSWORD }}" \
+            --config esphome/bed-presence-detector.yaml
+
+          ./scripts/deploy_homeassistant.sh \
+            --ha-host "${{ secrets.HA_HOST }}" \
+            --ha-token "${{ secrets.HA_TOKEN }}" \
+            --config-path homeassistant/
+        env:
+          ESPHOME_DEVICE_HOST: ${{ secrets.ESPHOME_DEVICE_HOST }}
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+
+      - name: Comment PR with cleanup status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr_number = context.payload.pull_request.number;
+
+            github.rest.issues.createComment({
+              issue_number: pr_number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🧹 Preview environment cleaned up. Device rolled back to `main` branch configuration.'
+            });
