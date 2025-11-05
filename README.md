@@ -1,4 +1,4 @@
-# HA Bed Presence Detector
+# Home Assistant Bed Presence Detector
 
 [![Compile Firmware](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml/badge.svg)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml)
 [![Lint YAML](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml/badge.svg)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml)
