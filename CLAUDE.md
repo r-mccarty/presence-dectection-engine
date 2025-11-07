@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a bed presence detection system for Home Assistant using an ESP32 microcontroller and LD2410 mmWave radar sensor. The project implements a **3-phase development roadmap** defined in `docs/presence-engine-spec.md`.
 
-**Current Status: Phase 2 IMPLEMENTED** ✅
+**Current Status: Phase 2 DEPLOYED** ✅
 
 The repository contains:
-- **Phase 2 presence engine** - State machine with temporal filtering ✅ **IMPLEMENTED**
+- **Phase 2 presence engine** - State machine with temporal filtering ✅ **DEPLOYED**
 - **Hardware deployment** - M5Stack + LD2410 connected to Home Assistant ✅ **OPERATIONAL**
 - **Baseline calibration** - Real sensor statistics collected and flashed ✅ **CALIBRATED**
 - **C++ unit tests** - Comprehensive test suite for Phase 2 logic ✅ **14 TESTS PASSING**
@@ -27,12 +27,12 @@ The project follows a 3-phase development plan documented in `docs/presence-engi
 - Runtime tunable thresholds via Home Assistant
 - **Status**: Completed 2025-11-06
 
-### Phase 2: State Machine + Debouncing ✅ CURRENT IMPLEMENTATION
+### Phase 2: State Machine + Debouncing ✅ DEPLOYED
 - 4-state machine (IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF)
 - Temporal filtering with configurable debounce timers (3s on, 5s off, 30s absolute clear delay)
 - Eliminates false positives/negatives from Phase 1
 - Runtime tunable debounce timers via Home Assistant
-- **Status**: Implemented 2025-11-07, ready for deployment
+- **Status**: Deployed to hardware 2025-11-07, fully operational
 
 ### Phase 3: Calibration + Environmental Hardening ⏳ PLANNED
 - Automated baseline calibration via Home Assistant services
@@ -530,38 +530,6 @@ float sigma_stat_{3.5f};  // Same as sigma_move_ for Phase 1
 
 **Note**: Phase 3 will automate this process via calibration services.
 
-### Implementing Phase 2 (State Machine + Debouncing)
-
-**Required changes**:
-
-1. **bed_presence.h**: Add state machine enum and timers
-   ```cpp
-   enum State { IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF };
-   State current_state_{IDLE};
-   unsigned long debounce_on_ms_{3000};
-   unsigned long debounce_off_ms_{5000};
-   unsigned long state_change_time_{0};
-   ```
-
-2. **bed_presence.cpp**: Replace immediate transitions with debounce logic
-   - `process_energy_reading()` becomes a state machine
-   - Track time in each debouncing state
-   - Only transition after timer expires
-
-3. **presence_engine.yaml**: Add debounce timer entities
-   ```yaml
-   number:
-     - platform: template
-       name: "Debounce Occupied (ms)"
-       # ... similar to k_on/k_off entities
-   ```
-
-4. **Update dashboard**: Add debounce timer controls (currently references non-existent entities)
-
-5. **Update unit tests**: Add time mocking and test debounce behavior
-
-**Reference**: See `docs/presence-engine-spec.md` Phase 2 requirements.
-
 ### Implementing Phase 3 (Automated Calibration)
 
 **Required changes**:
@@ -593,7 +561,7 @@ float sigma_stat_{3.5f};  // Same as sigma_move_ for Phase 1
 
 ### Unit Tests (C++ - Fast, No Hardware)
 
-**What they test**: Phase 1 z-score logic in isolation
+**What they test**: Phase 2 z-score logic and state machine in isolation
 
 **Run**: `cd esphome && platformio test -e native`
 
@@ -603,7 +571,7 @@ float sigma_stat_{3.5f};  // Same as sigma_move_ for Phase 1
 - Regression testing during refactoring
 - Fast feedback loop (runs in <5 seconds)
 
-**Coverage**: 14 tests validate all Phase 1 behavior
+**Coverage**: 14 tests validate all Phase 2 behavior (z-score, state machine, debouncing)
 
 ### ESPHome Compilation (Syntax Check)
 
@@ -932,8 +900,8 @@ cat /workspaces/bed-presence-sensor/esphome/secrets.yaml
 
 ## Summary of Current State
 
-**✅ Phase 2 IMPLEMENTED AND READY FOR DEPLOYMENT**:
-- ✅ Phase 2 state machine with temporal filtering (**code complete**)
+**✅ Phase 2 DEPLOYED AND OPERATIONAL**:
+- ✅ Phase 2 state machine with temporal filtering (**deployed to hardware**)
 - ✅ M5Stack + LD2410 hardware (**operational**, connected to Home Assistant)
 - ✅ Baseline calibration (**completed**: μ=6.7%, σ=3.5%, collected 2025-11-06)
 - ✅ C++ unit tests (14 Phase 2 tests, all passing)
@@ -948,23 +916,21 @@ cat /workspaces/bed-presence-sensor/esphome/secrets.yaml
 - ✅ **Ubuntu-node helper scripts** (`~/sync-and-flash.sh`, `~/flash-firmware.sh`)
 
 **What Needs Work** (Future Phases):
-- ⏳ **Phase 2 Deployment**: Flash Phase 2 firmware to hardware (code ready, awaiting deployment)
 - ⏳ **Phase 3**: Automated calibration services (planned)
 - ⚠️ Hardware assets are empty placeholders (STL, diagrams, demo)
 - ⚠️ Calibration services exist but are placeholders (Phase 3 implementation)
 
-**Phase 2 Completion Status**:
-1. ✅ **DONE**: 4-state machine implemented (IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF)
-2. ✅ **DONE**: Debounce timers added (3s on, 5s off, 30s absolute clear delay)
-3. ✅ **DONE**: Semantic fixes (mu_move_ → mu_still_, sigma_move_ → sigma_still_)
-4. ✅ **DONE**: 3 new Home Assistant entities (on_debounce_ms, off_debounce_ms, abs_clear_delay_ms)
-5. ✅ **DONE**: Unit tests updated with time mocking (14 tests passing)
-6. ✅ **DONE**: Dashboard updated with debounce timer controls
-7. ✅ **DONE**: Documentation created (`docs/phase2-completion-steps.md`)
-8. ✅ **PHASE 2 COMPLETE** (ready for deployment)
+**Phase 2 Deployment Status** (Completed 2025-11-07):
+1. ✅ **DEPLOYED**: 4-state machine running on hardware (IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF)
+2. ✅ **DEPLOYED**: Debounce timers active (3s on, 5s off, 30s absolute clear delay)
+3. ✅ **DEPLOYED**: All 7 entities available in Home Assistant (bed_occupied, state_reason, 5 tuning parameters)
+4. ✅ **VERIFIED**: State machine transitions observed (DEBOUNCING_ON → PRESENT after 3s)
+5. ✅ **VERIFIED**: Temporal filtering eliminating false positives/negatives
+6. ✅ **VERIFIED**: Runtime tuning functional via Home Assistant UI
+7. ✅ **PHASE 2 COMPLETE** - System is production-ready
 
 **Next Steps**:
-- **IMMEDIATE**: Deploy Phase 2 firmware to ubuntu-node hardware
+- **OPTIONAL**: Tune debounce parameters based on real-world usage patterns
 - **FUTURE**: Implement Phase 3 automated calibration
 
 **Hardware Configuration**:

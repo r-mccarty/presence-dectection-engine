@@ -21,7 +21,7 @@ This approach normalizes sensor readings to a statistical scale, making the dete
 
 ## Development Status
 
-✅ **Phase 1 COMPLETE** | ✅ **Phase 2 IMPLEMENTED** | ⏳ **Phase 3 Planned**
+✅ **Phase 1 COMPLETE** | ✅ **Phase 2 DEPLOYED** | ⏳ **Phase 3 Planned**
 
 This project follows a **3-phase development roadmap** (see `docs/presence-engine-spec.md` for details):
 
@@ -33,14 +33,15 @@ This project follows a **3-phase development roadmap** (see `docs/presence-engin
 - ✅ **Presence Detection Validated**: Correctly detects occupied (64% energy, z=16.37) and empty bed (3% energy, z=-1.06)
 - ✅ **Status**: Completed 2025-11-06
 
-### Phase 2: State Machine + Debouncing ✅ IMPLEMENTED (Ready for Deployment)
+### Phase 2: State Machine + Debouncing ✅ DEPLOYED
 - ✅ **4-State Machine**: IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF eliminates "twitchiness"
 - ✅ **Temporal Filtering**: 3-second on-debounce, 5-second off-debounce, 30-second absolute clear delay
 - ✅ **Runtime Tunable Timers**: Debounce parameters adjustable via Home Assistant without reflashing
 - ✅ **Comprehensive C++ Unit Tests**: 14 tests with time mocking (355 lines, all passing)
 - ✅ **Dashboard Updated**: Debounce timer controls added to Configuration view
 - ✅ **Semantic Fixes**: Variable naming corrected (mu_move_ → mu_still_ for accuracy)
-- ✅ **Status**: Implemented 2025-11-07, ready for hardware deployment
+- ✅ **Hardware Deployed**: Firmware flashed and operational on M5Stack device
+- ✅ **Status**: Deployed to hardware 2025-11-07, fully operational in production
 
 **Phase 2 Characteristics:**
 - Debounced state transitions prevent false positives/negatives
@@ -56,7 +57,7 @@ This project follows a **3-phase development roadmap** (see `docs/presence-engin
 - Calibration wizard UI in Home Assistant
 
 **Ready to Contribute?**
-- **Phase 2 deployment testing**: Deploy Phase 2 firmware and validate debouncing behavior
+- **Phase 2 tuning**: Real-world testing and optimization of debounce parameters
 - **Phase 3 implementation**: Automated calibration algorithm using MAD statistics
 - **Hardware assets**: 3D printable mounts and wiring diagrams
 - **Documentation**: Additional tuning guides and real-world deployment experiences
