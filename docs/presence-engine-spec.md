@@ -16,11 +16,12 @@
 
 #### **Engineering Requirements:**
 
-1. **Global Variables:** Define global variables within ESPHome for a static baseline (`μ_move`, `μ_stat`) and standard deviation (`σ_move`, `σ_stat`). These will be hardcoded initially.  
-2. **Z-Score Calculation:** For every frame from the sensor, calculate the "z-score" for both moving and static energy. This normalizes the energy reading into a measure of statistical significance.  
-   * `z_move = (current_moving_energy - μ_move) / σ_move`  
-3. **Threshold Knobs:** Expose two `number` entities to Home Assistant: `k_on` and `k_off`. These will be multipliers for the z-score. They must be persistent across reboots (`restore_value: true`).  
-4. **Core Binary Sensor:** Create a single `binary_sensor.bed_present` that turns ON when `z_move > k_on` and OFF when `z_move < k_off`.
+1. **Global Variables:** Define global variables within ESPHome for a static baseline (`μ_still`) and standard deviation (`σ_still`). These will be hardcoded initially. Phase 1 uses only still energy (see RFD-001).  
+2. **Z-Score Calculation:** For every frame from the sensor, calculate the "z-score" for still (stationary) energy. This normalizes the energy reading into a measure of statistical significance.
+   * `z_still = (current_still_energy - μ_still) / σ_still`
+   * **Note:** Phase 1 uses only `ld2410_still_energy` (see RFD-001 for rationale). Moving energy is reserved for Phase 3.  
+3. **Threshold Knobs:** Expose two `number` entities to Home Assistant: `k_on` and `k_off`. These will be multipliers for the z-score. They must be persistent across reboots (`restore_value: true`).
+4. **Core Binary Sensor:** Create a single `binary_sensor.bed_present` that turns ON when `z_still > k_on` and OFF when `z_still < k_off`.
 
 #### **Implementation Plan (ESPHome YAML & Custom Component):**
 
@@ -62,31 +63,150 @@ This logic is too complex for a simple `lambda` filter; it requires a custom C++
 
 **Objective:** Eliminate the "twitchiness" by introducing time-based filtering (debouncing) and building a formal state machine. This is where the core reliability features from the CONOPS are built.
 
+**Note:** Phase 2 continues using only `ld2410_still_energy` as the primary sensor (see RFD-001 for sensor selection rationale). Variable naming will be updated from `z_move`/`mu_move_`/`sigma_move_` to `z_still`/`mu_still_`/`sigma_still_` for accuracy.
+
 #### **Engineering Requirements:**
 
-2. **State Machine:** The C++ component must be refactored to implement a simple state machine with three states: `IDLE`, `PRESENT`, and `CLEARING`.  
-3. **On-Debounce:** The state can only transition from `IDLE` to `PRESENT` if the `z_move >= k_on` condition is met for a continuous duration defined by `on_debounce_ms`.  
-4. **Off-Debounce & Absolute Clear:** The state can only transition from `PRESENT` to `CLEARING` if `z_move < k_off` for a continuous `off_debounce_ms` **AND** a separate `abs_clear_delay_ms` has elapsed since the last strong presence signal.  
-5. **Tunable Debounce Knobs:** Expose `on_debounce_ms`, `off_debounce_ms`, and `abs_clear_delay_ms` as persistent `number` entities in Home Assistant.
+1. **State Machine:** The C++ component must be refactored to implement a four-state machine: `IDLE`, `DEBOUNCING_ON`, `PRESENT`, and `DEBOUNCING_OFF`.
+
+2. **State Transitions with Debouncing:**
+   * **IDLE → DEBOUNCING_ON:** When `z_still >= k_on`, start debounce timer
+   * **DEBOUNCING_ON → PRESENT:** When debounce timer reaches `on_debounce_ms` while condition remains true
+   * **DEBOUNCING_ON → IDLE:** If `z_still < k_on` before timer expires (condition failed, reset)
+   * **PRESENT → DEBOUNCING_OFF:** When `z_still < k_off` AND `abs_clear_delay_ms` has elapsed since last high-confidence signal
+   * **DEBOUNCING_OFF → IDLE:** When debounce timer reaches `off_debounce_ms` while condition remains true
+   * **DEBOUNCING_OFF → PRESENT:** If `z_still >= k_on` before timer expires (condition failed, reset)
+
+3. **On-Debounce:** The state can only transition from `IDLE` to `PRESENT` if the `z_still >= k_on` condition is met for a **continuous duration** defined by `on_debounce_ms`. If the condition becomes false during debouncing, the state reverts to `IDLE` and the timer resets.
+
+4. **Off-Debounce & Absolute Clear Delay:** The state can only transition from `PRESENT` to `IDLE` if:
+   * `z_still < k_off` for a continuous `off_debounce_ms`, **AND**
+   * A separate `abs_clear_delay_ms` has elapsed since the **last high-confidence presence signal**
+
+   **Definition:** "Last high-confidence presence signal" is defined as the last time `z_still > k_on` (i.e., exceeds the ON threshold). This timestamp is tracked in `last_high_confidence_time_` and is updated continuously while in `PRESENT` state whenever the high threshold is exceeded. This prevents premature clearing if the person recently showed strong presence.
+
+5. **Debounce Reset Conditions:**
+   * While in `DEBOUNCING_ON`: If `z_still` drops below `k_on`, immediately reset to `IDLE` (timer resets to 0)
+   * While in `DEBOUNCING_OFF`: If `z_still` rises above `k_on`, immediately reset to `PRESENT` and update `last_high_confidence_time_` (timer resets to 0)
+   * Debounce timers only count **continuous time** where the trigger condition holds true
+
+6. **Tunable Debounce Knobs:** Expose `on_debounce_ms`, `off_debounce_ms`, and `abs_clear_delay_ms` as persistent `number` entities in Home Assistant.
 
 #### **Implementation Plan (C++ Custom Component):**
 
-1. **Refactor `BedPresenceSensor.h`:**  
-   * Add an `enum State { IDLE, PRESENT, CLEARING };`  
-   * Add member variables: `State current_state;`, `unsigned long last_trigger_time;`, `unsigned long last_state_change_time;`.  
-2. **Refactor `BedPresenceSensor.cpp`:**  
-   * The `loop()` method will now be a `switch (current_state)` statement.  
-   * **Case `IDLE`:** Check if `z_move >= k_on`. If true, record the time. If `millis() - start_time > on_debounce_ms`, change state to `PRESENT`. If the condition becomes false, reset the timer.  
-   * **Case `PRESENT`:** Check if `z_move < k_off`. If true, record the time. If the condition holds for `off_debounce_ms` AND `millis() - last_strong_presence_time > abs_clear_delay_ms`, change state to `CLEARING`. If `z_move` goes back above `k_on`, update `last_strong_presence_time`.  
-   * **Case `CLEARING`:** This can be a transitional state that immediately moves to `IDLE` after publishing the `OFF` state, or it could have its own hold time if needed.  
-   * Publish the binary sensor state only upon a state change.
+1. **Refactor `BedPresenceSensor.h`:**
+   * Add an `enum State { IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF };`
+   * Add member variables:
+     ```cpp
+     State current_state_{IDLE};
+     unsigned long debounce_start_time_{0};      // Timestamp when debounce started
+     unsigned long last_high_confidence_time_{0}; // Last time z_still > k_on
+     unsigned long on_debounce_ms_{3000};         // Default: 3 seconds
+     unsigned long off_debounce_ms_{5000};        // Default: 5 seconds
+     unsigned long abs_clear_delay_ms_{30000};    // Default: 30 seconds
+     ```
+
+2. **Refactor `BedPresenceSensor.cpp`:**
+   * The `loop()` method will now be a `switch (current_state)` statement implementing the 4-state machine.
+
+   * **Case `IDLE`:**
+     * Check if `z_still >= k_on`
+     * If true: Record `debounce_start_time_ = millis()` and transition to `DEBOUNCING_ON`
+     * If false: Remain in `IDLE`
+
+   * **Case `DEBOUNCING_ON`:**
+     * Check if `z_still >= k_on` (condition still holds)
+     * If true AND `millis() - debounce_start_time_ >= on_debounce_ms`:
+       * Transition to `PRESENT`
+       * Publish binary sensor state as `ON`
+       * Update `last_high_confidence_time_ = millis()`
+     * If false (z_still dropped below k_on):
+       * Transition back to `IDLE` (debounce failed)
+       * Reset timer
+
+   * **Case `PRESENT`:**
+     * Continuously check if `z_still > k_on` and update `last_high_confidence_time_ = millis()` whenever true
+     * Check if `z_still < k_off` (low signal detected)
+     * If true AND `millis() - last_high_confidence_time_ >= abs_clear_delay_ms`:
+       * Record `debounce_start_time_ = millis()` and transition to `DEBOUNCING_OFF`
+     * If false: Remain in `PRESENT`
+
+   * **Case `DEBOUNCING_OFF`:**
+     * Check if `z_still < k_off` (condition still holds)
+     * If true AND `millis() - debounce_start_time_ >= off_debounce_ms`:
+       * Transition to `IDLE`
+       * Publish binary sensor state as `OFF`
+     * If `z_still >= k_on` before timer expires:
+       * Transition back to `PRESENT` (debounce failed, high signal returned)
+       * Update `last_high_confidence_time_ = millis()`
+       * Reset timer
+
+   * Publish the binary sensor state **only upon state changes** (`DEBOUNCING_ON → PRESENT` and `DEBOUNCING_OFF → IDLE`).
+
+3. **State Machine Diagram:**
+   ```
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │                    Phase 2: 4-State Machine                          │
+   └──────────────────────────────────────────────────────────────────────┘
+
+                         z_still >= k_on
+                    ┌─────────────────────┐
+                    │                     │
+                    ▼                     │
+        ┌───────────────────┐             │
+        │       IDLE        │◄────────────┤
+        │  (Binary: OFF)    │             │
+        └───────────────────┘             │
+                    │                     │
+                    │ z_still >= k_on     │
+                    ▼                     │
+        ┌───────────────────┐             │
+        │  DEBOUNCING_ON    │             │
+        │  (Binary: OFF)    │             │
+        │  Timer running    │             │
+        └───────────────────┘             │
+                    │                     │
+         Timer >= on_debounce_ms          │
+          & z_still >= k_on               │
+                    │                     │
+                    ▼                     │
+        ┌───────────────────┐             │
+        │     PRESENT       │             │
+        │  (Binary: ON)     │             │
+        │  Update high_conf │             │
+        └───────────────────┘             │
+                    │                     │
+         z_still < k_off &                │
+         time since high_conf             │
+           >= abs_clear_delay             │
+                    │                     │
+                    ▼                     │
+        ┌───────────────────┐             │
+        │  DEBOUNCING_OFF   │             │
+        │  (Binary: ON)     │             │
+        │  Timer running    │             │
+        └───────────────────┘             │
+                    │                     │
+         Timer >= off_debounce_ms         │
+          & z_still < k_off               │
+                    │                     │
+                    └─────────────────────┘
+
+   Reset Conditions (abort debounce):
+   - DEBOUNCING_ON → IDLE:    if z_still < k_on (lost signal)
+   - DEBOUNCING_OFF → PRESENT: if z_still >= k_on (signal returned)
+   ```
 
 #### **Testing & Validation:**
 
-* **Unit Test (C++):**  
-  * **Debounce On:** Simulate a stream of high z-scores lasting less than `on_debounce_ms`. **Assert:** The state remains `IDLE`. Then, provide a stream lasting longer than the debounce. **Assert:** The state transitions to `PRESENT`.  
-  * **Debounce Off:** With the state in `PRESENT`, simulate a stream of low z-scores lasting less than `off_debounce_ms`. **Assert:** The state remains `PRESENT`.  
-  * **Absolute Clear:** Test the `abs_clear_delay` logic by ensuring the state doesn't clear even after the off-debounce is met, if a strong signal was seen recently.  
+* **Unit Test (C++):**
+  * **State Initialization:** Verify the state machine starts in `IDLE` with binary sensor `OFF`.
+  * **Debounce On (Success):** Simulate high z-scores (`z_still >= k_on`) lasting longer than `on_debounce_ms`. **Assert:** State transitions `IDLE → DEBOUNCING_ON → PRESENT`, binary sensor publishes `ON`.
+  * **Debounce On (Failure):** Simulate high z-scores lasting less than `on_debounce_ms`, then drop below threshold. **Assert:** State transitions `IDLE → DEBOUNCING_ON → IDLE`, binary sensor remains `OFF`.
+  * **Debounce Off (Success):** With state in `PRESENT` and `last_high_confidence_time` old enough, simulate low z-scores (`z_still < k_off`) lasting longer than `off_debounce_ms`. **Assert:** State transitions `PRESENT → DEBOUNCING_OFF → IDLE`, binary sensor publishes `OFF`.
+  * **Debounce Off (Failure - Signal Returns):** In `DEBOUNCING_OFF`, simulate `z_still >= k_on` before timer expires. **Assert:** State transitions `DEBOUNCING_OFF → PRESENT`, binary sensor remains `ON`.
+  * **Absolute Clear Delay:** With state in `PRESENT`, simulate low z-scores but with `last_high_confidence_time` too recent. **Assert:** State remains `PRESENT` (doesn't transition to `DEBOUNCING_OFF`). Then advance time and verify transition occurs.
+  * **High Confidence Tracking:** In `PRESENT` state, verify `last_high_confidence_time_` updates whenever `z_still > k_on`.  
 * **E2E Integration Test:**  
   1. Flash the new firmware. Set `on_debounce` to 3000ms (3 seconds).  
   2. Quickly wave your hand in front of the sensor for 1 second. **Observe:** `bed_present` should **not** change state.  
@@ -98,6 +218,8 @@ This logic is too complex for a simple `lambda` filter; it requires a custom C++
 ### **Phase 3: Environmental Hardening & Calibration Services**
 
 **Objective:** Add advanced features that allow the sensor to adapt to its environment (distance windowing, fan filtering) and be controlled externally by the HA "Wizard" via services.
+
+**Note:** Phase 3 continues using `ld2410_still_energy` as the primary sensor (see RFD-001). Phase 3 may optionally introduce `ld2410_moving_energy` for sensor fusion or restlessness detection as a secondary feature, but still_energy remains the primary occupancy signal.
 
 #### **Engineering Requirements:**
 
