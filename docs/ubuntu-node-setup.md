@@ -82,6 +82,66 @@ Or directly:
 ssh -i ~/.ssh/your_key -o ProxyCommand="cloudflared access ssh --hostname ssh.your-domain.com" your-username@ssh.your-domain.com
 ```
 
+### SSH Port Forwarding for Home Assistant Access
+
+**Problem**: When working in GitHub Codespaces, you cannot directly access the Home Assistant web interface at `192.168.0.148:8123` because:
+- Codespace runs on GitHub's cloud infrastructure
+- HA is on your local network (192.168.0.148)
+- Different networks cannot communicate directly
+
+**Solution**: Use SSH port forwarding to create a tunnel through ubuntu-node.
+
+**Accessing HA Web UI from Codespace Browser**:
+
+```bash
+# In Codespace terminal
+ssh -L 8123:192.168.0.148:8123 ubuntu-node
+```
+
+**What this does**:
+- Creates a tunnel: `localhost:8123` (Codespace) → `192.168.0.148:8123` (HA on ubuntu-node's network)
+- Keep the SSH session open (don't close the terminal)
+
+**Then open in Codespace browser**: `http://localhost:8123`
+
+**SSH Tunnel Options**:
+
+```bash
+# Basic tunnel (blocks terminal)
+ssh -L 8123:192.168.0.148:8123 ubuntu-node
+
+# Run in background (returns terminal to you)
+ssh -fN -L 8123:192.168.0.148:8123 ubuntu-node
+
+# With keep-alive (prevents timeout)
+ssh -o ServerAliveInterval=60 -L 8123:192.168.0.148:8123 ubuntu-node
+```
+
+**Stopping background tunnel**:
+```bash
+# Find the SSH process
+ps aux | grep "ssh.*8123"
+
+# Kill it
+kill <process_id>
+```
+
+**Port Forwarding for Scripts**:
+
+If running Python scripts in Codespace that need HA API access:
+
+```bash
+# Terminal 1: Create tunnel
+ssh -L 8123:192.168.0.148:8123 ubuntu-node
+
+# Terminal 2: Run script
+cd /workspaces/bed-presence-sensor
+python3 scripts/collect_baseline.py
+# Script will connect to localhost:8123, which tunnels to HA
+```
+
+**Note**: It's usually easier to run scripts directly on ubuntu-node instead of using tunnels from Codespace.
+
 ## User Accounts
 
 ### Development User Setup
@@ -568,18 +628,24 @@ esphome logs bed-presence-detector.yaml --device /dev/ttyACM0
 
 ## Workflow 4: Secrets Management (Special Case)
 
-**⚠️ secrets.yaml is gitignored and must be managed manually**
+**⚠️ TWO secrets files are gitignored and must be managed manually**
 
 ### Problem
 
-`esphome/secrets.yaml` contains WiFi credentials and is NOT in git. This file can get out of sync between Codespace and ubuntu-node.
+This project uses **two different secrets files** that are NOT in git:
+1. `esphome/secrets.yaml` - WiFi credentials for firmware
+2. `.env.local` - Home Assistant API access for scripts
 
-### Solution: Ubuntu-node is Source of Truth
+Both files can get out of sync between Codespace and ubuntu-node.
+
+### Solution: Ubuntu-node is Source of Truth for BOTH Files
+
+**File 1: WiFi Credentials** (`esphome/secrets.yaml`)
 
 ```bash
 # ALWAYS copy secrets FROM ubuntu-node TO Codespace (not the reverse)
 
-# In Codespace: Get secrets from ubuntu-node
+# In Codespace: Get WiFi secrets from ubuntu-node
 ssh ubuntu-node "cat ~/bed-presence-sensor/esphome/secrets.yaml" > /workspaces/bed-presence-sensor/esphome/secrets.yaml
 
 # Verify
@@ -587,16 +653,30 @@ cat /workspaces/bed-presence-sensor/esphome/secrets.yaml
 # Should show: wifi_ssid: "TP-Link_BECC" (actual SSID)
 ```
 
-**Why**: Ubuntu-node has the real WiFi credentials that work with the physical network. Codespace has placeholders.
+**File 2: Home Assistant API Access** (`.env.local`)
+
+```bash
+# In Codespace: Get HA API credentials from ubuntu-node
+ssh ubuntu-node "cat ~/bed-presence-sensor/.env.local" > /workspaces/bed-presence-sensor/.env.local
+
+# Verify
+cat /workspaces/bed-presence-sensor/.env.local
+# Should show: HA_URL=http://192.168.0.148:8123
+#              HA_TOKEN=eyJhbGci... (long token string)
+```
+
+**Why**: Ubuntu-node has the real credentials that work with the physical network and Home Assistant instance. Codespace may have placeholders or stale values.
 
 **When to sync secrets**:
-- Before compiling firmware in Codespace (if you want to test compilation)
-- After WiFi credentials change
+- **`secrets.yaml`**: Before compiling firmware in Codespace (to test compilation with real WiFi)
+- **`.env.local`**: Before running scripts like `collect_baseline.py` in Codespace (rare - usually run on ubuntu-node)
+- After credentials change (WiFi password, HA token regenerated)
 - When setting up a new Codespace
 
 **Never**:
-- Commit `secrets.yaml` to git
+- Commit `secrets.yaml` or `.env.local` to git
 - Copy placeholder secrets from Codespace to ubuntu-node
+- Reverse the direction (ubuntu-node is ALWAYS source of truth)
 
 ---
 

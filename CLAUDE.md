@@ -304,6 +304,51 @@ esphome:
 - ⚠️ Sensor remains "twitchy" with rapid state changes due to no debouncing (Phase 2 feature)
 - Tuned thresholds reduce but don't eliminate oscillation during movement in bed
 
+## Network Access from Codespaces
+
+**⚠️ IMPORTANT**: GitHub Codespaces runs on GitHub's cloud infrastructure and **cannot directly access** your local Home Assistant instance at `192.168.0.148:8123`.
+
+### Accessing Home Assistant Web UI from Codespaces
+
+To view the Home Assistant web interface from your Codespace browser, use **SSH port forwarding**:
+
+```bash
+# In Codespace terminal
+ssh -L 8123:192.168.0.148:8123 ubuntu-node
+```
+
+This creates a tunnel that forwards:
+- Local port 8123 (in Codespace) → 192.168.0.148:8123 (Home Assistant on ubuntu-node's network)
+
+**Then access Home Assistant at**: `http://localhost:8123` in your Codespace browser
+
+**Keep the SSH session open** while browsing - closing it will break the tunnel.
+
+### Running Python Scripts That Need Home Assistant API
+
+Scripts like `collect_baseline.py` need to connect to the Home Assistant API. You have **two options**:
+
+**Option 1: Run Directly on Ubuntu-node** (RECOMMENDED)
+```bash
+ssh ubuntu-node "cd ~/bed-presence-sensor && python3 scripts/collect_baseline.py"
+```
+- Script runs on ubuntu-node where HA is on localhost
+- No network issues, fastest performance
+- Uses `.env.local` on ubuntu-node
+
+**Option 2: Run in Codespace with SSH Tunnel**
+```bash
+# Terminal 1: Create SSH tunnel
+ssh -L 8123:192.168.0.148:8123 ubuntu-node
+
+# Terminal 2: Run script with localhost URL
+cd /workspaces/bed-presence-sensor
+python3 scripts/collect_baseline.py
+# Script will use HA_URL=http://localhost:8123 from .env.local (if configured)
+```
+
+**Note**: Most development workflows run scripts directly on ubuntu-node to avoid networking complexity.
+
 ## Development Workflow
 
 **⚠️ CRITICAL**: This project uses a **two-location workflow**. Code changes are made in **GitHub Codespace**, synced via **git**, and firmware is flashed from **ubuntu-node** (which has physical USB access to the M5Stack device).
@@ -655,54 +700,128 @@ pip install esphome platformio pytest pytest-asyncio yamllint black
 
 ## Secrets Management
 
-### ESPHome Secrets (`esphome/secrets.yaml`)
+**⚠️ IMPORTANT**: This project uses **TWO different secrets files** for different purposes. Understanding the distinction is critical.
 
-**File**: `esphome/secrets.yaml` (gitignored)
+### Quick Reference: Which Secrets File Do I Need?
 
-**Create from template**:
+| File | Location | Purpose | Contains | Used By | Source of Truth |
+|------|----------|---------|----------|---------|-----------------|
+| **`.env.local`** | Project root | Python scripts access HA API | `HA_URL`, `HA_WS_URL`, `HA_TOKEN` | `collect_baseline.py`, E2E tests, monitoring scripts | **Ubuntu-node** |
+| **`secrets.yaml`** | `esphome/` | WiFi credentials embedded in firmware | `wifi_ssid`, `wifi_password`, `api_encryption_key`, `ota_password` | ESPHome compiler | **Ubuntu-node** |
+
+**Key Points:**
+- These files are **completely unrelated** and serve different purposes
+- Both are gitignored (contain sensitive credentials)
+- **Ubuntu-node is the source of truth** for both files
+- When working in Codespace, copy FROM ubuntu-node TO Codespace (never reverse)
+
+### File 1: `.env.local` - Home Assistant API Access
+
+**Purpose**: Python scripts need to connect to the Home Assistant REST/WebSocket API to read sensor values or control entities.
+
+**Location**: `/workspaces/bed-presence-sensor/.env.local` (project root, gitignored)
+
+**Contains**:
 ```bash
-cd esphome
-cp secrets.yaml.example secrets.yaml
-```
-
-**Edit** `secrets.yaml`:
-```yaml
-wifi_ssid: "YourWiFiNetwork"
-wifi_password: "YourWiFiPassword"
-api_encryption_key: "generate-with-esphome-wizard"
-ota_password: "generate-with-esphome-wizard"
-```
-
-**Never commit** `secrets.yaml` to git.
-
-### Home Assistant API Configuration (`.env.local`)
-
-**File**: `.env.local` (gitignored, project root)
-
-Used for baseline calibration script and E2E tests to connect to Home Assistant.
-
-**Create**:
-```bash
-cat > .env.local << EOF
 # Home Assistant Connection Configuration
 HA_URL=http://192.168.0.148:8123
 HA_WS_URL=ws://192.168.0.148:8123/api/websocket
-HA_TOKEN=your-long-lived-access-token
-EOF
+HA_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...  # Long-lived access token
 ```
 
-**Get Long-Lived Access Token**:
-1. Open Home Assistant → Profile (bottom left)
+**Used by**:
+- `scripts/collect_baseline.py` - Collects LD2410 sensor readings from HA
+- `tests/e2e/test_calibration_flow.py` - Integration tests
+- Any script that needs to read/write HA entities
+
+**How to get a Long-Lived Access Token**:
+1. Open Home Assistant web UI → Profile (bottom left)
 2. Scroll to "Long-Lived Access Tokens"
 3. Click "Create Token"
 4. Name: "Bed Presence Development"
-5. Copy token and paste into `.env.local`
+5. Copy the token (shown only once!)
 
-**Usage**:
-- Baseline calibration: `python3 scripts/collect_baseline.py` (auto-loads from `.env.local`)
-- E2E tests: `pytest tests/e2e/` (auto-loads from `.env.local`)
+**On Ubuntu-node** (source of truth):
+```bash
+# Already exists at ~/bed-presence-sensor/.env.local
+cat ~/bed-presence-sensor/.env.local
+```
 
-**Never commit** `.env.local` to git.
+**On Codespace** (copy from ubuntu-node):
+```bash
+# Copy .env.local FROM ubuntu-node TO Codespace
+ssh ubuntu-node "cat ~/bed-presence-sensor/.env.local" > /workspaces/bed-presence-sensor/.env.local
+
+# Verify
+cat /workspaces/bed-presence-sensor/.env.local
+```
+
+**Never commit** `.env.local` to git (contains sensitive HA_TOKEN).
+
+### File 2: `esphome/secrets.yaml` - WiFi Credentials for Firmware
+
+**Purpose**: ESP32 device needs WiFi credentials to connect to your local network. These are embedded into the firmware binary during compilation.
+
+**Location**: `/workspaces/bed-presence-sensor/esphome/secrets.yaml` (gitignored)
+
+**Contains**:
+```yaml
+wifi_ssid: "TP-Link_BECC"
+wifi_password: "your_wifi_password"
+api_encryption_key: "base64-encoded-key-here"
+ota_password: "your_ota_password"
+```
+
+**Used by**:
+- ESPHome compiler (`esphome compile bed-presence-detector.yaml`)
+- Credentials are burned into firmware during compilation
+- ESP32 device uses these to connect to WiFi and Home Assistant
+
+**On Ubuntu-node** (source of truth):
+```bash
+# Already exists at ~/bed-presence-sensor/esphome/secrets.yaml
+cat ~/bed-presence-sensor/esphome/secrets.yaml
+```
+
+**On Codespace** (copy from ubuntu-node):
+```bash
+# Copy secrets.yaml FROM ubuntu-node TO Codespace
+ssh ubuntu-node "cat ~/bed-presence-sensor/esphome/secrets.yaml" > /workspaces/bed-presence-sensor/esphome/secrets.yaml
+
+# Verify
+cat /workspaces/bed-presence-sensor/esphome/secrets.yaml
+```
+
+**Never commit** `secrets.yaml` to git (contains WiFi password).
+
+### Why Two Files?
+
+**Context 1: Python Scripts Running on a Computer**
+- Scripts run on ubuntu-node or Codespace (regular computers with network access)
+- Need to connect TO Home Assistant API over HTTP/WebSocket
+- Use `.env.local` with `HA_URL` and `HA_TOKEN`
+
+**Context 2: ESP32 Firmware Running on Embedded Device**
+- Firmware runs on M5Stack ESP32 (embedded microcontroller)
+- Needs WiFi credentials to join network and reach Home Assistant
+- Uses `secrets.yaml` credentials embedded during compilation
+
+**These are completely separate contexts with different tools and different needs.**
+
+### Troubleshooting
+
+**"collect_baseline.py fails with connection error"**
+- Check that `.env.local` exists and has correct `HA_URL` and `HA_TOKEN`
+- From Codespace: Use SSH tunnel (see "Network Access from Codespaces") OR run on ubuntu-node
+- Verify token is valid in HA → Profile → Long-Lived Access Tokens
+
+**"ESPHome compile fails - secrets.yaml not found"**
+- Copy `secrets.yaml` from ubuntu-node: `ssh ubuntu-node "cat ~/bed-presence-sensor/esphome/secrets.yaml" > esphome/secrets.yaml`
+- Or create from template: `cp esphome/secrets.yaml.example esphome/secrets.yaml` and fill in values
+
+**"Which file do I edit?"**
+- Changing WiFi network → Edit `esphome/secrets.yaml` (then recompile firmware)
+- Changing HA access for scripts → Edit `.env.local` (no recompile needed)
 
 ## Key Files Reference
 
