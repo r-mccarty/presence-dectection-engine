@@ -41,6 +41,7 @@ Before connecting the LD2410 sensor, verify your existing M5Stack firmware:
 - ⚠️ TX on LD2410 connects to RX on M5Stack (cross-over)
 - ⚠️ RX on LD2410 connects to TX on M5Stack (cross-over)
 - The LD2410 operates at 256000 baud (configured in YAML)
+- Phase 1 and Phase 2 both use **still energy only** per [RFD-001](RFD-001-still-vs-moving-energy.md)
 
 ## Step 3: Collect Baseline Data
 
@@ -55,41 +56,36 @@ esphome run bed-presence-detector.yaml
 
 Choose your M5Stack device and flash.
 
-### 3B. Observe Energy Values
+### 3B. Observe Still Energy Values
 
-1. Go to Home Assistant → Developer Tools → States
-2. Find these entities:
-   - `sensor.ld2410_moving_energy`
-   - `sensor.ld2410_still_energy`
-3. **Leave the bed completely empty** for 60 seconds
+The [presence engine spec](presence-engine-spec.md#phase-1-foundational-logic---from-energy-to-binary-state)
+defines the z-score using still energy, so confirm that signal first.
+
+1. Go to Home Assistant → Developer Tools → States.
+2. Find `sensor.ld2410_still_energy`.
+3. **Leave the bed completely empty** for 60 seconds.
 4. **Record the values** you observe:
-   - Watch for typical values (e.g., mostly around 40-60)
-   - Note the range of variation (e.g., occasionally spikes to 80)
+   - Typical empty-bed baseline should hover around **6-8%**.
+   - Expect minor noise with standard deviation near **3-4%**.
+   - Large spikes (>20%) usually indicate motion in the room—remove the cause and repeat.
 
-### 3C. Calculate Baseline Statistics
+### 3C. Calculate Baseline Statistics (Still Energy Only)
 
-You need to estimate **μ** (mean) and **σ** (standard deviation):
+Phase 1 relies exclusively on still energy (see [RFD-001](RFD-001-still-vs-moving-energy.md)), so focus on estimating:
 
-**Moving Energy:**
-- μ_move = Typical value when empty (e.g., 50)
-- σ_move = How much it varies (e.g., 15)
-  - If values range from 40-60, σ ≈ 10
-  - If values range from 30-70, σ ≈ 20
+- **μ_still** – the mean still energy when the bed is empty.
+- **σ_still** – the standard deviation of that still energy baseline.
 
-**Still/Static Energy:**
-- μ_stat = Typical value when empty (e.g., 80)
-- σ_stat = How much it varies (e.g., 10)
+> **Reference:** Our production baseline (collected 2025-11-06) measured μ_still = **6.7** and σ_still = **3.5**.
+> Use your own measurements, but these values are a helpful sanity check.
 
 **Example observations:**
 ```
-Moving energy: Usually 45-55, occasionally spikes to 65
-Still energy: Usually 75-85, very stable
+Still energy readings (empty bed): 5.1, 6.4, 6.8, 7.5, 5.9, 6.2
 
 Estimates:
-μ_move = 50
-σ_move = 10
-μ_stat = 80
-σ_stat = 5
+μ_still ≈ 6.7
+σ_still ≈ 3.4
 ```
 
 ## Step 4: Update Hardcoded Values
@@ -97,14 +93,12 @@ Estimates:
 Edit `esphome/custom_components/bed_presence_engine/bed_presence.h`:
 
 ```cpp
-// Line 43-46: Replace with your observed values
-float mu_move_{50.0f};    // Your μ_move value
-float sigma_move_{10.0f}; // Your σ_move value
-float mu_stat_{80.0f};    // Your μ_stat value
-float sigma_stat_{5.0f};  // Your σ_stat value
+// Replace with your observed still-energy baseline
+float mu_still_{6.7f};    // Mean still energy (empty bed)
+float sigma_still_{3.5f}; // Std dev still energy (empty bed)
 ```
 
-**Note:** Phase 1 currently uses `still_energy` (static), but the code is ready for both moving and static.
+**Note:** Even in Phase 1 we rely solely on `ld2410_still_energy`. Moving-energy fusion is deferred to Phase 3.
 
 ## Step 5: Recompile and Flash Phase 1 Firmware
 
@@ -133,8 +127,8 @@ You should now see:
 - `text_sensor.presence_state_reason` - Shows why state last changed
 
 **Raw Sensors (for debugging):**
-- `sensor.ld2410_moving_energy`
-- `sensor.ld2410_still_energy`
+- `sensor.ld2410_still_energy` (primary Phase 1 signal)
+- `sensor.ld2410_moving_energy` (available but ignored by the engine)
 - `sensor.ld2410_moving_distance`
 - etc.
 
@@ -202,7 +196,7 @@ esphome logs bed-presence-detector.yaml
 
 Look for:
 - `[bed_presence_engine] Setting up Bed Presence Engine (Phase 1)...`
-- `[bed_presence_engine] Baseline (moving): μ=X.XX, σ=X.XX`
+- `[bed_presence_engine] Baseline (still): μ=X.XX, σ=X.XX`
 - `[bed_presence_engine] Presence detected: ON: z=X.XX > k_on=X.XX`
 - `[bed_presence_engine] Presence cleared: OFF: z=X.XX < k_off=X.XX`
 
