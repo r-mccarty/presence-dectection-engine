@@ -12,14 +12,15 @@
     }
   },
 
-  // Runs as root during container creation. Perfect for installing system tools.
+  // Runs as root during container creation to install system-level tools.
   "onCreateCommand": "set -eux && curl -fsSL https://claude.ai/install.sh | bash || true && if [ -x /root/.local/bin/claude ]; then install -m 0755 /root/.local/bin/claude /usr/local/bin/claude; fi",
 
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
 
-  // Runs as the vscode user after the container is created. For user/project setup.
-  "postCreateCommand": "mkdir -p ~/.config/vscode-dev-containers && touch ~/.config/vscode-dev-containers/first-run-notice-already-displayed && pip install --upgrade pip && pip install esphome platformio pytest pytest-asyncio yamllint black && cd tests/e2e && pip install -r requirements.txt && cd ../..",
+  // Runs as the 'vscode' user after the container is created.
+  // Using a single string with '&&' to ensure sequential execution in a shell.
+  "postCreateCommand": "mkdir -p ~/.config/vscode-dev-containers && touch ~/.config/vscode-dev-containers/first-run-notice-already-displayed && pip install --upgrade pip && pip install esphome platformio pytest pytest-asyncio yamllint black && cd tests/e2e && pip install -r requirements.txt && cd ../.. && . /usr/local/share/nvm/nvm.sh && npm i -g @openai/codex @google/gemini-cli",
   
   "customizations": {
     "vscode": {
