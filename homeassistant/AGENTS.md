@@ -10,7 +10,7 @@ Guidance for agents editing Home Assistant assets in this directory (`homeassist
 homeassistant/
 ├── blueprints/automation/bed_presence_automation.yaml   # Automation blueprint for presence events
 ├── dashboards/bed_presence_dashboard.yaml               # Lovelace dashboard configuration
-└── configuration_helpers.yaml.example                   # Calibration wizard scaffolding (pending UI)
+└── configuration_helpers.yaml                           # HA helper + script definitions for the calibration wizard
 ```
 
 ## Current Status: Phase 3 DEPLOYED
@@ -41,10 +41,10 @@ homeassistant/
 - `text_sensor.bed_presence_detector_esphome_version` (firmware version)
 - `text_sensor.bed_presence_detector_presence_change_reason` (recent state-change cause)
 
-### Phase 3 (Firmware Deployed, Wizard Pending)
-- Calibration wizard cards in the dashboard remain commented until the HA helper entities are finalized
-- `configuration_helpers.yaml.example` contains the planned helper entity scaffolding (keep updated)
-- ESPHome calibration/reset services are live; UI buttons or scripts can call them today
+### Phase 3 (Firmware + Wizard Deployed)
+- Calibration wizard view is live in `dashboards/bed_presence_dashboard.yaml` (see **Calibration Wizard** tab).
+- `configuration_helpers.yaml` defines input helpers, scripts, and automations that wrap ESPHome services.
+- Buttons + scripts call the same `calibrate_start_baseline`/`calibrate_stop` services that firmware exposes.
 
 ## Editing Guidelines
 - **YAML style**: 2-space indentation, descriptive `name`/`label` strings (these render directly in HA UI)
@@ -63,7 +63,7 @@ homeassistant/
 - **Trigger**: State changes of `binary_sensor.bed_presence_detector_bed_occupied`
 - **Actions**: Separate sequences for presence detected (→ on) and presence cleared (→ off)
 - **Filters**: Optional time windows, person presence conditions
-- **Future**: Once the HA wizard ships, expose helper inputs/actions that trigger `calibrate_start_baseline` + reset services
+- **Wizard integration**: Reuse `script.bed_presence_start_baseline_calibration` or related helpers when automating calibration from blueprints
 
 When modifying:
 - Test blueprint import in Home Assistant UI
@@ -73,7 +73,7 @@ When modifying:
 
 ## Dashboard Highlights
 
-`dashboards/bed_presence_dashboard.yaml` structure (Phase 2):
+`dashboards/bed_presence_dashboard.yaml` structure:
 
 1. **Status View**
    - Binary sensor state (bed occupied/clear)
@@ -98,7 +98,7 @@ When modifying:
    - ESPHome version
    - IP address
 
-5. **Calibration Wizard (commented)** – Phase 3 UI pending; leave commented until helper entities are ready
+5. **Calibration Wizard** – Guided workflow driven by helper entities (confirmation toggle, duration slider, start/cancel/reset buttons, status + timestamp card)
 
 **Critical**: Ensure all default values match firmware (k_on=9.0, k_off=4.0, timers=3s/5s/30s). Update `docs/quickstart.md` screenshots if layout changes.
 

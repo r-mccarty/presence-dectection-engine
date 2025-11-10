@@ -273,20 +273,18 @@ To verify threshold behavior:
 
 ## Known Issues and Limitations
 
-### Calibration Wizard UI (Pending)
+### Calibration History Persistence (Pending)
 
-**Status:** Phase 3 firmware is deployed; Home Assistant dashboard wizard still pending.
+**Status:** The guided Home Assistant wizard is live, but baseline snapshots are still volatile (lost on reboot unless recorded manually).
 
-**Issue:** Operators must call ESPHome services manually (Developer Tools or automations). There is no guided UI yet.
-
-**Impact:** Users need to manually track calibration steps/timers, which can lead to inconsistent procedures.
+**Issue:** μ/σ values derived during calibration only live in RAM. Operators who forget to note the `Last Calibration` timestamp or resulting statistics may lose traceability after a power cycle.
 
 **Workaround:**
-1. Use Developer Tools → Services with saved presets (e.g., 60 seconds) or set up a simple HA script.
-2. Monitor ESPHome logs/text sensors for progress until the wizard ships.
-3. Document the timestamp + μ/σ values after each calibration for traceability.
+1. Use the wizard's status card to copy the completion timestamp into release notes or HA logbook.
+2. Store μ/σ readings in Home Assistant helpers (input_text/input_number) or automation traces after each calibration run.
+3. Keep the distance window tight; rerun the wizard any time the environment changes significantly.
 
-**Planned fix:** Build a Lovelace dashboard + helper entities to orchestrate vacant/occupied sampling and display progress.
+**Planned fix:** Persist baseline snapshots in flash (device side) and optionally surface history sensors in Home Assistant.
 
 ---
 

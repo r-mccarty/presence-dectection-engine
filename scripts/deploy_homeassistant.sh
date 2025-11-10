@@ -207,7 +207,11 @@ deploy_dashboards_api() {
 deploy_config_helpers() {
   echo -e "${YELLOW}Checking configuration helpers...${NC}"
 
-  local helpers_file="$CONFIG_PATH/configuration_helpers.yaml.example"
+  local helpers_file="$CONFIG_PATH/configuration_helpers.yaml"
+
+  if [ ! -f "$helpers_file" ]; then
+    helpers_file="$CONFIG_PATH/configuration_helpers.yaml.example"
+  fi
 
   if [ ! -f "$helpers_file" ]; then
     echo -e "${YELLOW}No configuration helpers found${NC}"
@@ -218,10 +222,14 @@ deploy_config_helpers() {
   echo -e "${BLUE}See: $helpers_file${NC}"
 
   # Check if helpers already exist
-  echo "  Checking for required input_boolean entities..."
+  echo "  Checking for required calibration helper entities..."
 
   local entities=(
-    "input_boolean.bed_presence_calibration_mode"
+    "input_boolean.bed_presence_calibration_in_progress"
+    "input_boolean.bed_presence_calibration_confirm_empty_bed"
+    "input_select.bed_presence_calibration_step"
+    "input_number.bed_presence_calibration_duration_seconds"
+    "input_datetime.bed_presence_last_calibration"
   )
 
   for entity in "${entities[@]}"; do

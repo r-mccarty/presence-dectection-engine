@@ -315,7 +315,7 @@ cd tests/e2e
 pip install -r requirements.txt  # Install dependencies including homeassistant-api
 export HA_URL="ws://your-ha-instance:8123/api/websocket"
 export HA_TOKEN="your-long-lived-access-token"
-pytest  # HA wizard helper tests remain skipped until UI ships
+pytest  # Full calibration flow test stays skipped (requires human interaction)
 ```
 
 **Note:** E2E tests require a live Home Assistant instance with the device connected.
@@ -406,10 +406,10 @@ black tests/e2e/ scripts/
 
 ### Areas for Contribution
 
-**Calibration Wizard + Analytics:**
-- Build the Home Assistant dashboard wizard for guiding calibrations
+**Calibration Persistence + Analytics:**
+- Store μ/σ snapshots on device + surface history in Home Assistant
 - Extend MAD pipeline with occupancy/restlessness analytics
-- Polish telemetry around change-reason metrics
+- Polish telemetry around change-reason metrics / alerting
 
 **Hardware Assets:**
 - 3D printable mounts for various sensor positions

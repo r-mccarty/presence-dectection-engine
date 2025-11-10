@@ -1,0 +1,176 @@
+---
+# Home Assistant helper + script definitions for the calibration wizard.
+# Include this file from configuration.yaml (or copy/paste the sections below).
+
+input_select:
+  bed_presence_calibration_step:
+    name: Bed Presence Calibration Step
+    icon: mdi:wizard-hat
+    options:
+      - Idle
+      - Awaiting Empty Bed Confirmation
+      - Collecting Samples
+      - Finalizing
+      - Completed
+      - Error
+    initial: Idle
+
+input_boolean:
+  bed_presence_calibration_confirm_empty_bed:
+    name: Confirm Bed Is Empty
+    icon: mdi:checkbox-marked-circle-outline
+    initial: false
+  bed_presence_calibration_in_progress:
+    name: Calibration In Progress
+    icon: mdi:progress-clock
+    initial: false
+
+input_number:
+  bed_presence_calibration_duration_seconds:
+    name: Calibration Duration (seconds)
+    icon: mdi:timer-outline
+    min: 30
+    max: 300
+    step: 15
+    unit_of_measurement: s
+    mode: slider
+    initial: 60
+
+input_datetime:
+  bed_presence_last_calibration:
+    name: Last Calibration Completed
+    has_date: true
+    has_time: true
+
+script:
+  bed_presence_start_baseline_calibration:
+    alias: Bed Presence – Start Baseline Calibration
+    mode: restart
+    sequence:
+      - variables:
+          duration: "{{ [states('input_number.bed_presence_calibration_duration_seconds') | int(60), 10] | max }}"
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_boolean.bed_presence_calibration_confirm_empty_bed
+                state: "on"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.bed_presence_calibration_in_progress
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.bed_presence_calibration_step
+                data:
+                  option: Collecting Samples
+              - service: esphome.bed_presence_detector_calibrate_start_baseline
+                data:
+                  duration_s: "{{ duration }}"
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.bed_presence_calibration_confirm_empty_bed
+              - delay:
+                  seconds: "{{ duration }}"
+              - service: esphome.bed_presence_detector_calibrate_stop
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.bed_presence_calibration_step
+                data:
+                  option: Finalizing
+          - default:
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.bed_presence_calibration_step
+                data:
+                  option: Awaiting Empty Bed Confirmation
+
+  bed_presence_cancel_baseline_calibration:
+    alias: Bed Presence – Cancel Calibration
+    mode: single
+    sequence:
+      - service: esphome.bed_presence_detector_calibrate_stop
+      - service: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.bed_presence_calibration_in_progress
+            - input_boolean.bed_presence_calibration_confirm_empty_bed
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.bed_presence_calibration_step
+        data:
+          option: Idle
+
+  bed_presence_reset_calibration_defaults:
+    alias: Bed Presence – Reset to Defaults
+    mode: single
+    sequence:
+      - service: esphome.bed_presence_detector_calibrate_reset_all
+      - service: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.bed_presence_calibration_in_progress
+            - input_boolean.bed_presence_calibration_confirm_empty_bed
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.bed_presence_calibration_step
+        data:
+          option: Idle
+
+  # Legacy aliases retained for compatibility with existing automations/tests
+  calibrate_vacant_mode:
+    alias: Legacy – Calibrate Vacant Mode
+    mode: restart
+    sequence:
+      - service: script.bed_presence_start_baseline_calibration
+  calibrate_occupied_mode:
+    alias: Legacy – Calibrate Occupied Mode
+    mode: restart
+    sequence:
+      - service: script.bed_presence_start_baseline_calibration
+
+automation:
+  - id: bed_presence_calibration_status
+    alias: Bed Presence – Calibration Status Tracker
+    trigger:
+      - platform: state
+        entity_id: sensor.bed_presence_detector_presence_change_reason
+    condition: []
+    action:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ trigger.to_state is not none and
+                     'calibration:completed' in trigger.to_state.state }}
+            sequence:
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.bed_presence_calibration_step
+                data:
+                  option: Completed
+              - service: input_boolean.turn_off
+                target:
+                  entity_id:
+                    - input_boolean.bed_presence_calibration_in_progress
+                    - input_boolean.bed_presence_calibration_confirm_empty_bed
+              - service: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.bed_presence_last_calibration
+                data:
+                  datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ trigger.to_state is not none and
+                     'calibration:insufficient_samples' in trigger.to_state.state }}
+            sequence:
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.bed_presence_calibration_step
+                data:
+                  option: Error
+              - service: input_boolean.turn_off
+                target:
+                  entity_id:
+                    - input_boolean.bed_presence_calibration_in_progress
+                    - input_boolean.bed_presence_calibration_confirm_empty_bed

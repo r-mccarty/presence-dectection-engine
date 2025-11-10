@@ -23,7 +23,7 @@ pip install -r requirements.txt
 # Verify .env.local exists with HA credentials
 cat ~/.env.local  # Should contain HA_URL and HA_TOKEN
 
-# Run full test suite (wizard helpers auto-skipped)
+# Run full test suite
 pytest -v
 
 # Run specific test categories
@@ -39,7 +39,7 @@ pytest -v -k "calibration" # Calibration tests
 - ✅ **Debounce timer controls**: Test on/off/absolute-clear debounce timers (Phase 2 addition)
 - ✅ **State/change reason telemetry**: Verify text sensors provide z-score diagnostics + reason codes
 - ✅ **ESPHome services**: Test Phase 3 calibration + reset services end-to-end
-- ⏸️ **Calibration helpers**: HA dashboard wizard still pending (scripts remain commented)
+- ✅ **Calibration helpers**: Home Assistant wizard helpers + scripts validated
 
 ## Environment Requirements
 
@@ -96,7 +96,7 @@ HA_TOKEN=your_long_lived_access_token_here
   - k_on = 9.0, k_off = 4.0
   - on_debounce = 3000ms, off_debounce = 5000ms, absolute_clear = 30000ms
   - Baseline: μ = 6.7%, σ = 3.5%
-- **Wizard helpers**: Only skip tests that rely on future HA dashboard wizard (still planned)
+- **Wizard helpers**: Ensure calibration helper tests remain up-to-date with HA dashboard changes
 - **Test isolation**: Use fixtures to reset thresholds/timers between tests
 - **Entity IDs**: Match exactly with `esphome/packages/presence_engine.yaml`
 - **Documentation sync**: When adding new tests, update this file and `docs/ARCHITECTURE.md`
@@ -167,6 +167,6 @@ When firmware behavior changes:
 ### Test Failures
 - **Flaky tests**: Increase debounce timers or polling intervals
 - **Defaults mismatch**: Check firmware was compiled with latest thresholds
-- **HA wizard tests running**: Keep `@pytest.mark.skip` on tests tied to the future dashboard helpers
+- **HA wizard tests**: Only skip tests that depend on human interaction (full calibration flow)
 
 For broader context, see `../../AGENTS.md`. For firmware issues, see `../../esphome/AGENTS.md`.

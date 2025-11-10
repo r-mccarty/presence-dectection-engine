@@ -355,9 +355,8 @@ Phase 2 established the production-ready foundation. Phase 3 has since delivered
 3. **MAD Statistics** – Outlier-resistant σ calculation replaces manual spreadsheet workflows.
 
 Remaining wishlist items (Phase 3.1+):
-- Home Assistant calibration wizard + helper entities
+- Calibration history persistence / wizard telemetry snapshots
 - Optional moving-energy fusion / restlessness metrics
-- Flash persistence for calibration history
 
 See `docs/presence-engine-spec.md` for the deployed specification and upcoming enhancements.
 

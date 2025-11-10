@@ -43,7 +43,7 @@ docs/
 2. **Phase markers** – clearly distinguish:
    - ✅ Phase 1 (Z-score detection) – COMPLETE
    - ✅ Phase 2 (State machine + debouncing) – DEPLOYED
-   - ✅ Phase 3 (Automated calibration + hardening) – DEPLOYED (wizard UI still pending)
+   - ✅ Phase 3 (Automated calibration + hardening) – DEPLOYED (wizard + helpers live)
 3. **Audience clarity**:
    - Engineering specs (ARCHITECTURE.md, presence-engine-spec.md) assume C++/ESPHome expertise
    - Operator guides (quickstart.md, troubleshooting.md, FAQ) must be accessible to Home Assistant users
@@ -78,12 +78,12 @@ When documenting workflows:
 
 ## Review Checklist Before Commit
 - [ ] Facts match firmware + HA configuration (entity IDs, defaults, state names)
-- [ ] Phase status correct (Phase 3 DEPLOYED, wizard UI still pending)
+- [ ] Phase status correct (Phase 3 DEPLOYED, wizard + helpers documented)
 - [ ] Two-machine workflow clearly explained where relevant
 - [ ] Screenshots/diagrams updated if UI changed
 - [ ] Internal/external links work (use `markdown-link-check` if unsure)
 - [ ] Spelling/grammar checked (`cspell` or editor tools)
-- [ ] Phase references accurate (✅ Phase 1/2/3 complete, 🎯 wizard pending)
+- [ ] Phase references accurate (✅ Phase 1/2/3 complete, next up: persistence/analytics)
 - [ ] Tables + lists render correctly in GitHub preview
 - [ ] Cross-references prioritize the 5 primary docs from CLAUDE.md
 

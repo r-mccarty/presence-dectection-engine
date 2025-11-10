@@ -1,3 +1,4 @@
+---
 # Bed Presence Dashboard
 # Provides operator view and calibration wizard interface
 
@@ -85,74 +86,84 @@ views:
             name: Distance Max (cm)
 
       # Quick Actions
-      - type: button
-        name: Reset to Factory Defaults
-        tap_action:
-          action: call-service
-          service: esphome.bed_presence_detector_calibrate_reset_all
-
       - type: grid
-        title: Calibration Actions
-        columns: 2
+        title: Calibration Quick Actions
+        columns: 3
         cards:
           - type: button
-            name: Start Baseline (60s)
-            icon: mdi:chart-bell-curve-cumulative
+            name: Start Baseline (Wizard)
+            icon: mdi:wizard-hat
             tap_action:
               action: call-service
-              service: esphome.bed_presence_detector_calibrate_start_baseline
-              data:
-                duration_s: 60
+              service: script.bed_presence_start_baseline_calibration
           - type: button
-            name: Stop Calibration
-            icon: mdi:stop
+            name: Cancel Calibration
+            icon: mdi:stop-circle-outline
             tap_action:
               action: call-service
-              service: esphome.bed_presence_detector_calibrate_stop
+              service: script.bed_presence_cancel_baseline_calibration
+          - type: button
+            name: Reset To Defaults
+            icon: mdi:backup-restore
+            tap_action:
+              action: call-service
+              service: script.bed_presence_reset_calibration_defaults
 
-  # NOTE: Calibration Wizard view commented out - requires helper entities not yet defined
-  # Uncomment when input_select.calibration_step, input_number.calibration_vacant_max,
-  # input_number.calibration_occupied_min, input_boolean.calibration_in_progress,
-  # script.calibrate_vacant_mode, and script.calibrate_occupied_mode are created
-  #
-  # - title: Calibration Wizard
-  #   path: calibration
-  #   icon: mdi:wizard-hat
-  #   cards:
-  #     - type: markdown
-  #       content: |
-  #         ## Calibration Wizard
-  #
-  #         Follow these steps to calibrate your bed presence detector:
-  #
-  #         1. **Vacant Calibration**: Ensure the bed is completely empty
-  #         2. **Occupied Calibration**: Lie down on the bed in your normal sleeping position
-  #         3. **Review & Apply**: Check the calculated thresholds and apply them
-  #
-  #     # Calibration Step Tracker
-  #     - type: entities
-  #       title: Calibration Progress
-  #       entities:
-  #         - input_select.calibration_step
-  #         - input_number.calibration_vacant_max
-  #         - input_number.calibration_occupied_min
-  #         - input_boolean.calibration_in_progress
-  #
-  #     # Calibration Actions
-  #     - type: horizontal-stack
-  #       cards:
-  #         - type: button
-  #           name: Start Vacant Calibration
-  #           icon: mdi:bed-empty
-  #           tap_action:
-  #             action: call-service
-  #             service: script.calibrate_vacant_mode
-  #         - type: button
-  #           name: Start Occupied Calibration
-  #           icon: mdi:bed
-  #           tap_action:
-  #             action: call-service
-  #             service: script.calibrate_occupied_mode
+  - title: Calibration Wizard
+    path: calibration
+    icon: mdi:wizard-hat
+    cards:
+      - type: markdown
+        content: |
+          ## Guided Calibration
+
+          1. Confirm the bed is empty and within the configured distance window.
+          2. Toggle **Confirm Bed Is Empty**, then press **Start Baseline**.
+          3. Remain out of bed until the sampling timer finishes.
+          4. Review the status panel for `calibration:completed` before reusing the bed.
+
+          > Tip: Adjust the sampling duration slider if your room is noisy. Longer captures improve MAD accuracy.
+
+      - type: entities
+        title: Wizard Status
+        entities:
+          - entity: input_select.bed_presence_calibration_step
+            name: Current Step
+          - entity: input_boolean.bed_presence_calibration_in_progress
+            name: In Progress
+          - entity: input_datetime.bed_presence_last_calibration
+            name: Last Completed
+          - entity: sensor.bed_presence_detector_presence_change_reason
+            name: Change Reason (Device)
+
+      - type: entities
+        title: Preconditions & Duration
+        entities:
+          - entity: input_boolean.bed_presence_calibration_confirm_empty_bed
+            name: I confirm the bed is empty
+          - entity: input_number.bed_presence_calibration_duration_seconds
+            name: Sample Duration (seconds)
+
+      - type: horizontal-stack
+        cards:
+          - type: button
+            name: Start Baseline
+            icon: mdi:play-circle
+            tap_action:
+              action: call-service
+              service: script.bed_presence_start_baseline_calibration
+          - type: button
+            name: Cancel
+            icon: mdi:stop-circle
+            tap_action:
+              action: call-service
+              service: script.bed_presence_cancel_baseline_calibration
+          - type: button
+            name: Reset Defaults
+            icon: mdi:backup-restore
+            tap_action:
+              action: call-service
+              service: script.bed_presence_reset_calibration_defaults
 
   - title: Diagnostics
     path: diagnostics

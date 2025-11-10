@@ -468,7 +468,7 @@ Once Phase 1 is complete and validated:
 - ✅ Automated baseline collection service (`calibrate_start_baseline`)
 - ✅ MAD (Median Absolute Deviation) statistical analysis
 - ✅ Distance windowing (ignore specific zones)
-- 🔜 Calibration helper entities & UI wizard (commented in dashboard)
+- 🔜 Calibration history snapshots + persistence
 
 ---
 

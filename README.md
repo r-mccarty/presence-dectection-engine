@@ -23,6 +23,7 @@ For a complete technical breakdown, see the [**Project Architecture**](docs/ARCH
 *   **4-State Machine with Debouncing** - Eliminates false positives/negatives through temporal filtering
 *   **Distance Windowing** - Ignore noise sources outside the configured min/max range
 *   **Automated Calibration** - MAD-based baseline service (`calibrate_start_baseline`) tunes μ/σ in-place
+*   **Guided Calibration Wizard** - Home Assistant helpers/scripts walk non-technical users through safe recalibration with status tracking
 *   **Runtime Tunable** - Adjust thresholds, timers, and distance window via Home Assistant without reflashing
 *   **Transparent Dashboard** - Live visualization of energy levels, z-scores, and state transitions
 *   **Fully Tested** - 16 C++ unit tests plus Python E2E integration tests
@@ -36,6 +37,7 @@ For a complete technical breakdown, see the [**Project Architecture**](docs/ARCH
 | [**Hardware Setup**](docs/HARDWARE_SETUP.md) | Wiring, sensor calibration, and hardware configuration |
 | [**Development Workflow**](docs/DEVELOPMENT_WORKFLOW.md) | Codespace ↔ ubuntu-node workflow, network access, and common tasks |
 | [**Contributing**](CONTRIBUTING.md) | Environment setup, secrets management, and development commands |
+| [**Calibration Helpers**](homeassistant/configuration_helpers.yaml) | HA helper entities + scripts powering the guided wizard |
 | [**Troubleshooting**](docs/troubleshooting.md) | Common issues and solutions |
 | [**FAQ**](docs/faq.md) | Frequently asked questions |
 | [**Quick Start**](docs/quickstart.md) | User-facing quick start guide |
@@ -115,7 +117,7 @@ Contributions are welcome! Please see the [**Contributing Guide**](CONTRIBUTING.
 - CI/CD workflows
 
 **Areas for contribution:**
-- Home Assistant calibration wizard + UI helpers
+- Calibration history persistence + analytics
 - Real-world tuning and optimization
 - Hardware assets (3D printable mounts, wiring diagrams)
 - Documentation improvements

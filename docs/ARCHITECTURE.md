@@ -147,7 +147,7 @@ Reset Conditions (abort debounce):
 - Distance window defaults to `[0cm, 600cm]` so existing deployments behave identically until tuned.
 - Flash persistence remains a future enhancement; values survive until reboot thanks to runtime storage.
 
-**Status:** Deployed 2025-11-08 alongside 16 C++ unit tests + new e2e coverage. Home Assistant calibration wizard UI is still planned but device-side automation is complete.
+**Status:** Deployed 2025-11-08 alongside 16 C++ unit tests + new e2e coverage. Home Assistant calibration wizard + helpers (`homeassistant/configuration_helpers.yaml`) now wrap these services, leaving flash persistence as the remaining backlog item.
 
 ---
 

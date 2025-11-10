@@ -193,7 +193,8 @@ binary_sensor:
 - Automated baseline calibration via ESPHome services (MAD statistics)
 - Distance windowing to ignore zones and noisy areas
 - Presence change reason telemetry + reset services
-- **Status**: Deployed 2025-11-08 (HA wizard still pending)
+- Guided Home Assistant calibration wizard with helper entities + scripts
+- **Status**: Deployed 2025-11-08 (wizard shipped 2025-11-xx)
 
 ## Calibration Questions
 
@@ -237,8 +238,9 @@ binary_sensor:
 samples, computes μ/σ via MAD, and updates runtime values on the fly. `Presence Change Reason` will report
 `calibration:completed` when finished.
 
-**Need a UI?** A dedicated Home Assistant wizard is still pending; for now call the ESPHome service directly or wrap it
-in a simple HA script/button.
+**Need a UI?** Use the **Calibration Wizard** tab on the Bed Presence dashboard after including
+`homeassistant/configuration_helpers.yaml`. It wraps the same ESPHome services with confirmations, timers, and
+status tracking.
 
 ## Development Questions
 

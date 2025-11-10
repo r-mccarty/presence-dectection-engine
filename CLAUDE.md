@@ -225,13 +225,13 @@ This repository's information has been refactored into focused documents. **Alwa
 - MAD-based baseline calibration via ESPHome services (start/stop/reset)
 - New text sensor exposes last change reason codes (e.g., `on:threshold_exceeded`)
 - Runtime reset service restores all knobs/baselines to known-good defaults
-- Home Assistant wizard helpers remain TODO, but device-side automation is complete
+- Home Assistant wizard helpers + dashboard shipped; next up is calibration persistence
 
 ---
 
 ## Known Issues and Limitations
 
-**Calibration Wizard UI:** Device-side MAD calibration + reset services are live, but the Home Assistant dashboard wizard remains in progress. Trigger calibration via Developer Tools → Services until the UI helpers ship.
+**Calibration Wizard UI:** Home Assistant helpers + dashboard view (`homeassistant/configuration_helpers.yaml` + `homeassistant/dashboards/bed_presence_dashboard.yaml`) now wrap the ESPHome services. Use the wizard for everyday recalibration; Developer Tools remain available for advanced overrides.
 
 **Empty Hardware Assets:** The following files are 0-byte placeholders:
 - `hardware/mounts/m5stack_side_mount.stl`

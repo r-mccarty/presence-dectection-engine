@@ -16,50 +16,38 @@ happens through ESPHome services and Home Assistant.
 
 ## Phase 3 Automated Workflow (Recommended)
 
-### 1. Prepare the environment
-1. Position the LD2410 sensor exactly where it will live.
+### 1. Enable the Calibration Wizard
+1. Copy `homeassistant/configuration_helpers.yaml` into your HA configuration (or include it via `!include`).
+2. Reload helpers/scripts and ensure the new entities (input_select/input_boolean/input_number/input_datetime + scripts)
+   exist in Developer Tools → States.
+3. Open the **Bed Presence Detector** dashboard → **Calibration Wizard** tab.
+
+### 2. Prepare the environment
+1. Position the LD2410 sensor where it will remain.
 2. Empty the bed completely (no people, pets, or large objects).
-3. Set `number.bed_presence_detector_distance_min_cm` / `distance_max_cm` so the intended bed zone is inside the
-   window and nearby noise sources (doorway, fan) are excluded.
-4. Open Home Assistant → Developer Tools → Services or use the ESPHome web UI for the device.
+3. Set `number.bed_presence_detector_distance_min_cm` / `distance_max_cm` to cover only the bed zone.
 
-### 2. Start baseline collection
-Call either service (both map to the same device-side implementation):
+### 3. Run the wizard
+1. Toggle **I confirm the bed is empty**.
+2. Adjust the **Calibration Duration** slider (60 seconds default; 90–120 seconds helps in noisy rooms).
+3. Press **Start Baseline**. The wizard:
+   - Calls `esphome.bed_presence_detector_calibrate_start_baseline` with the selected duration
+   - Tracks progress via `input_select.bed_presence_calibration_step`
+   - Automatically calls `esphome.bed_presence_detector_calibrate_stop` when the timer completes
+4. Watch the `Wizard Status` card or `sensor.bed_presence_detector_presence_change_reason` for
+   `calibration:completed` (success) or `calibration:insufficient_samples` (retry needed).
 
-```
-service: esphome.bed_presence_detector_calibrate_start_baseline
-data:
-  duration_s: 60
-```
+### 4. Review & Validate
+1. The automation updates `input_datetime.bed_presence_last_calibration` whenever a calibration completes.
+2. Check `sensor.bed_presence_detector_ld2410_still_energy`—empty-bed readings should hover around 0 z-score.
+3. Lie in the bed to confirm PRESENT → DEBOUNCING_OFF transitions feel correct. If not, rerun the wizard or fine-tune `k_on`/`k_off`.
 
-Guidelines:
-- `duration_s` must be > 0. 60 seconds is the default; 90–120 seconds is helpful in noisy rooms.
-- Samples are captured only when frames fall inside the configured distance window.
-- You can also call the legacy alias `esphome.bed_presence_detector_start_calibration`.
-
-### 3. Monitor progress
-- **ESPHome logs** (`esphome logs bed-presence-detector.yaml`) show sample counts and MAD summary.
-- **Text sensors**:
-  - `sensor.bed_presence_detector_presence_state_reason` reports verbose status (`Calibration complete: μ=...`).
-  - `sensor.bed_presence_detector_presence_change_reason` transitions to `calibration:started`, then
-    `calibration:completed` or `calibration:insufficient_samples`.
-- The device auto-finalizes when the timer expires or when you call `esphome.bed_presence_detector_calibrate_stop`.
-
-### 4. Validate the new baseline
-1. Check Home Assistant graphs—`ld2410_still_energy` z-scores should sit near 0 with an empty bed.
-2. Lie in the bed; the binary sensor should enter PRESENT after the on-debounce interval using the new μ/σ.
-3. If anything looks off, rerun calibration or adjust `k_on`/`k_off` until satisfied.
-
-### 5. Reset if needed
-If you ever need to roll back to the known-good defaults:
-
-```
-service: esphome.bed_presence_detector_calibrate_reset_all
-```
-
-This resets μ/σ, thresholds, debounce timers, and distance window, and republishes the default values to the
-Home Assistant number entities. The legacy alias `esphome.bed_presence_detector_reset_to_defaults` remains
-available.
+### 5. Manual fallback & resets
+- Need to intervene? Use the dashboard's **Cancel** button (`script.bed_presence_cancel_baseline_calibration`).
+- Roll back to defaults with **Reset Defaults** (`script.bed_presence_reset_calibration_defaults`, which wraps
+  `esphome.bed_presence_detector_calibrate_reset_all`).
+- Prefer Developer Tools → Services? Call `esphome.bed_presence_detector_calibrate_start_baseline` /
+  `..._calibrate_stop` directly—the wizard is a friendly wrapper over those services.
 
 ---
 

@@ -155,18 +155,30 @@ async def test_change_reason_sensor(ha_client):
     assert len(state["state"]) > 0, "Change reason is empty"
 
 
-@pytest.mark.skip(reason="Calibration wizard helpers not yet implemented")
 @pytest.mark.asyncio
 async def test_calibration_helpers_exist(ha_client):
     """Test that the calibration helper entities exist in Home Assistant"""
-    calibration_step = await ha_client.get_state("input_select.calibration_step")
-    calibration_in_progress = await ha_client.get_state("input_boolean.calibration_in_progress")
+    helper_entities = [
+        "input_select.bed_presence_calibration_step",
+        "input_boolean.bed_presence_calibration_in_progress",
+        "input_boolean.bed_presence_calibration_confirm_empty_bed",
+        "input_number.bed_presence_calibration_duration_seconds",
+        "input_datetime.bed_presence_last_calibration",
+        "script.bed_presence_start_baseline_calibration",
+        "script.bed_presence_cancel_baseline_calibration",
+        "script.bed_presence_reset_calibration_defaults",
+    ]
 
-    assert calibration_step is not None, "Calibration step input_select not found"
-    assert calibration_in_progress is not None, "Calibration in_progress input_boolean not found"
+    missing = []
+    for entity_id in helper_entities:
+        state = await ha_client.get_state(entity_id)
+        if state is None:
+            missing.append(entity_id)
+
+    assert not missing, f"Missing calibration helper entities: {missing}"
 
 
-@pytest.mark.skip(reason="Calibration wizard scripts not yet implemented")
+@pytest.mark.skip(reason="Requires physical calibration cycle with empty bed")
 @pytest.mark.asyncio
 async def test_full_calibration_flow(ha_client):
     """
@@ -185,14 +197,14 @@ async def test_full_calibration_flow(ha_client):
     await asyncio.sleep(1)
 
     # Start vacant calibration script
-    await ha_client.call_service("script", "calibrate_vacant_mode")
+    await ha_client.call_service("script", "bed_presence_start_baseline_calibration")
 
     # Wait for calibration to complete (script has 30s delay)
     await asyncio.sleep(35)
 
     # Check that calibration step was updated
-    step_state = await ha_client.get_state("input_select.calibration_step")
-    assert step_state["state"] in ["Review Results", "Completed"], \
+    step_state = await ha_client.get_state("input_select.bed_presence_calibration_step")
+    assert step_state["state"] in ["Finalizing", "Completed"], \
         f"Unexpected calibration step: {step_state['state']}"
 
     # Note: Full flow would continue with occupied calibration,

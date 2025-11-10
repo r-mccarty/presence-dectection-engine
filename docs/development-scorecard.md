@@ -10,7 +10,7 @@ evidence exists, and what follow-up work remains.
 |-------|------|--------|------------|-------------------|
 | Phase 1 – Z-Score Foundation | 2025-11-06 | ✅ Complete | Hardcoded μ/σ baseline, live HA connectivity, scripts + tests in place | Documented follow-up functional soak tests |
 | Phase 2 – Debounced State Machine | 2025-11-07 | ✅ Deployed | 4-state engine with tunable debounce timers, dashboard controls, expanded unit suite | Physical multi-scenario validation + tuning |
-| Phase 3 – Automated Calibration & Hardening | 2025-11-08 | ✅ Deployed | MAD-based calibration service, distance windowing, change reasons, reset helpers | HA calibration wizard, persistence niceties, optional moving-energy fusion |
+| Phase 3 – Automated Calibration & Hardening | 2025-11-08 | ✅ Deployed | MAD-based calibration service, distance windowing, change reasons, reset helpers | Calibration history/persistence, optional moving-energy fusion |
 
 For detailed historical logs, see `docs/phase1-completion-steps.md` and `docs/phase2-completion-steps.md`.
 
@@ -63,15 +63,13 @@ For detailed historical logs, see `docs/phase1-completion-steps.md` and `docs/ph
 - Presence change reasons now surfaced in HA for debugging (e.g., `on:threshold_exceeded`).
 
 ### Remaining Capacity / Wishlist
-- Build Home Assistant calibration wizard + helper entities (dashboard placeholders exist).
 - Persist calibration history snapshots for auditing + quick rollback.
 - Explore optional moving-energy fusion / restlessness metrics once Phase 3 telemetry is stable.
 
 ## Forward Work (Phase 3.1+ Opportunities)
-1. **UX polish:** Finish HA wizard + documentation so non-technical users can run calibrations safely.
-2. **Data persistence:** Store baseline snapshots and wizard outcomes (local flash + HA sensor history).
-3. **Advanced analytics:** Investigate moving-energy fusion, restlessness scoring, or multi-target filtering.
-4. **Operational monitoring:** Add alerts for calibration drift, sensor offline events, or excessive abs_clear hits.
+1. **Data persistence:** Store baseline snapshots and wizard outcomes (local flash + HA sensor history).
+2. **Advanced analytics:** Investigate moving-energy fusion, restlessness scoring, or multi-target filtering.
+3. **Operational monitoring:** Add alerts for calibration drift, sensor offline events, or excessive abs_clear hits.
 
 Refer back to `docs/presence-engine-spec.md` for formal requirements and to `docs/ARCHITECTURE.md` for the
 authoritative design details backing each phase.

@@ -151,10 +151,17 @@ Then: Settings → Automations & Scenes → Create Automation → Use Blueprint
    - If false negatives (doesn't detect when occupied): Decrease `k_on` to 8.0 or 7.0
    - For slow clearing when still: Increase `abs_clear_delay_ms` to 60000 (60s)
 
-### Full Calibration (ESPHome Services - Recommended)
+### Full Calibration (Guided Wizard – Recommended)
 
-1. Empty the bed completely and verify the desired detection zone is within the distance window.
-2. Home Assistant → Developer Tools → Services:
+1. Include `homeassistant/configuration_helpers.yaml` in your Home Assistant configuration and reload helpers.
+2. Open the **Bed Presence Detector** dashboard → **Calibration Wizard** tab.
+3. Toggle **I confirm the bed is empty**, adjust the duration slider if needed, then press **Start Baseline**.
+4. Stay out of bed until the wizard step changes to **Finalizing**, then wait for the change-reason sensor to report `calibration:completed`.
+5. Review the updated baseline/time stamps in the status card. Use the **Reset Defaults** button if you need to roll back.
+
+### Manual Service Invocation (Advanced)
+
+If you prefer using Developer Tools → Services, call:
 
 ```
 service: esphome.bed_presence_detector_calibrate_start_baseline
@@ -162,12 +169,10 @@ data:
   duration_s: 60
 ```
 
-3. Watch ESPHome logs or the `Presence Change Reason` sensor for `calibration:completed`.
-4. Validate behavior (lie in bed, leave bed). Rerun if the room or bedding changes again.
-5. Need to roll back? Call `esphome.bed_presence_detector_calibrate_reset_all`.
+Stop with `esphome.bed_presence_detector_calibrate_stop` or reset via `esphome.bed_presence_detector_calibrate_reset_all`.
 
-> **Need raw CSV data?** `scripts/collect_baseline.py` still works, but Phase 3 automation keeps firmware and Home
-> Assistant perfectly aligned without manual edits.
+> **Need raw CSV data?** `scripts/collect_baseline.py` still works, but the wizard keeps firmware and Home Assistant
+> perfectly aligned without manual edits.
 
 See [calibration.md](calibration.md) for the detailed workflow plus the legacy script instructions.
 
@@ -237,7 +242,7 @@ All adjustments can be made in Home Assistant without reflashing firmware.
 **Phase 3** ✅ Deployed:
 - Automated baseline calibration via ESPHome services (MAD statistics)
 - Distance windowing to ignore specific zones/noise sources
-- Presence change reason telemetry + reset services (HA wizard still pending)
+- Presence change reason telemetry + reset services, plus guided HA calibration wizard
 
 ## Next Steps
 
