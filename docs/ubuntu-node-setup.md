@@ -90,6 +90,16 @@ You reach the node through Cloudflare Tunnel at `ssh.hardwareos.com`. Cloudflare
    ```bash
    ls -l ~/.ssh/claude-temp
    ```
+   > **Warning**: Generate the private key inside the Codespace (or another trusted local machine) and copy **only the public half** to the ubuntu-node. Generating the key on the node and pasting the public portion into a Codespaces secret reverses the trust boundary—the Codespace would then hold a public key that cannot authenticate anywhere.
+
+#### Recommended developer ↔ admin workflow
+
+1. **Developer (Codespace)**: Run `ssh-keygen -t ed25519 -f ~/.ssh/claude-temp -C "claude-temp@$(hostname)"` and copy the output of `cat ~/.ssh/claude-temp.pub`.
+2. **Admin (ubuntu-node)**: Append that public key to `/home/claude-temp/.ssh/authorized_keys`, making sure the directory exists with `700` perms and the file with `600` perms owned by `claude-temp:claude-temp`.
+3. **Developer**: Store the private key contents from `~/.ssh/claude-temp` as the `SSH_CLAUDE_TEMP_KEY` Codespaces secret so future containers recreate the same identity automatically.
+4. **Developer**: Rebuild or restart the Codespace (or run `devcontainer rebuild`) so the secret is materialized at `~/.ssh/claude-temp`, then run `ssh -vv ubuntu-node true` to confirm Cloudflare tunnel access.
+
+> **Common pitfall**: Some contributors mistakenly run `ssh-keygen` on the ubuntu-node and paste the resulting *public* key into a Codespaces secret. This cannot work because SSH needs the **private** key on the client (Codespace) and the **public** key on the server (ubuntu-node). Always keep the private key client-side and only share the matching public key with the admin.
 
 > **Security note**: If you revoke access to the ubuntu-node, delete the secret and remove the corresponding public key from `/home/claude-temp/.ssh/authorized_keys`.
 
