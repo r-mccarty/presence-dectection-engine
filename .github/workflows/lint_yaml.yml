@@ -28,7 +28,8 @@ jobs:
           wifi_ssid: "DummySSID"
           wifi_password: "DummyPassword123"
           ap_password: "DummyAPPassword123"
-          api_encryption_key: "DummyAPIKey1234567890123456789012"
+          # 32-byte base64 string generated via os.urandom for CI use only
+          api_encryption_key: "FdPJUiUipHO/HBl5/B+u5GzFwsmDgSTIi7WQVIj0SaU="
           ota_password: "DummyOTAPassword123"
           EOF
 
