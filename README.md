@@ -1,7 +1,7 @@
 # Home Assistant Bed Presence Detector
 
-[![Compile Firmware](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml/badge.svg)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml)
-[![Lint YAML](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml/badge.svg)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml)
+[![Compile Firmware](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml/badge.svg?branch=main&event=push)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/compile_firmware.yml)
+[![Lint YAML](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml/badge.svg?branch=main&event=push)](https://github.com/r-mccarty/bed-presence-sensor/actions/workflows/lint_yaml.yml)
 
 A high-reliability, tunable, and transparent bed-presence detection solution for Home Assistant using an ESP32 microcontroller and an LD2410 mmWave radar sensor.
 
