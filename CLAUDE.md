@@ -8,7 +8,7 @@
 
 This is an ESP32-based bed presence detection system using an LD2410 mmWave sensor. It uses **z-score statistical analysis** and a **4-state machine** (IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF) for reliable presence detection.
 
-*   **Current Status:** Phase 2 is **DEPLOYED** and fully operational. The system uses temporal filtering (debouncing) to prevent false positives/negatives.
+*   **Current Status:** Phase 3 is **DEPLOYED** and fully operational. The system now includes automated MAD-based calibration, distance windowing, and detailed change reasons on top of the Phase 2 temporal filtering.
 *   **Hardware:** M5Stack Basic (ESP32) + LD2410 mmWave sensor, connected to Home Assistant at IP 192.168.0.148
 *   **Baseline:** μ=6.7%, σ=3.5% (calibrated 2025-11-06, empty bed)
 *   **Source of Truth for Logic:** The engineering specification is in `docs/presence-engine-spec.md`.
@@ -141,6 +141,21 @@ This repository's information has been refactored into focused documents. **Alwa
 
 **All parameters are runtime tunable via Home Assistant number entities.**
 
+**Distance Window Defaults:**
+- d_min_cm = 0 (allow all readings)
+- d_max_cm = 600 (full LD2410 range)
+- Frames outside the window are ignored by the presence logic and calibration sampler.
+
+**Calibration + Reset Services (ESPHome):**
+- `esphome.bed_presence_detector_calibrate_start_baseline` (preferred) or `..._start_calibration` legacy alias
+- `esphome.bed_presence_detector_calibrate_stop` / `..._stop_calibration`
+- `esphome.bed_presence_detector_calibrate_reset_all` / `..._reset_to_defaults`
+- Services collect still-energy samples, compute μ/σ via MAD, and push defaults back to HA number entities.
+
+**Telemetry:**
+- `sensor.bed_presence_detector_presence_state_reason` → Verbose z-score + timer context
+- `sensor.bed_presence_detector_presence_change_reason` → Short reason codes (`on:threshold_exceeded`, `calibration:completed`, etc.)
+
 ---
 
 ## Monorepo Structure (Abbreviated)
@@ -190,20 +205,21 @@ This repository's information has been refactored into focused documents. **Alwa
 - 4-state machine (IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF)
 - Temporal filtering eliminates false positives/negatives
 - Runtime tunable debounce timers
-- 14 C++ unit tests, all passing
+- 16 C++ unit tests, all passing
 - Fully operational on hardware
 
-**⏳ Phase 3: Automated Calibration** - PLANNED
-- Automated baseline calibration via Home Assistant services
-- MAD (Median Absolute Deviation) statistical analysis
-- Distance windowing to ignore specific zones
-- **Status:** Service stubs exist but no implementation
+**✅ Phase 3: Environmental Hardening + Calibration** - DEPLOYED (2025-11-08)
+- Distance windowing driven by `distance_min/max` runtime knobs
+- MAD-based baseline calibration via ESPHome services (start/stop/reset)
+- New text sensor exposes last change reason codes (e.g., `on:threshold_exceeded`)
+- Runtime reset service restores all knobs/baselines to known-good defaults
+- Home Assistant wizard helpers remain TODO, but device-side automation is complete
 
 ---
 
 ## Known Issues and Limitations
 
-**Placeholder Services:** Calibration services (`start_calibration`, `stop_calibration`) are defined but only log messages. Phase 3 will implement actual calibration logic.
+**Calibration Wizard UI:** Device-side MAD calibration + reset services are live, but the Home Assistant dashboard wizard remains in progress. Trigger calibration via Developer Tools → Services until the UI helpers ship.
 
 **Empty Hardware Assets:** The following files are 0-byte placeholders:
 - `hardware/mounts/m5stack_side_mount.stl`

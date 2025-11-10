@@ -111,15 +111,15 @@ ssh ubuntu-node
 
 1. Settings → Devices & Services → ESPHome → Bed Presence Detector
 2. Verify 3 new entities:
-   - `number.bed_presence_detector_on_debounce_timer_ms` ✅ (value: 3000)
-   - `number.bed_presence_detector_off_debounce_timer_ms` ✅ (value: 5000)
+   - `number.bed_presence_detector_on_debounce_ms` ✅ (value: 3000)
+   - `number.bed_presence_detector_off_debounce_ms` ✅ (value: 5000)
    - `number.bed_presence_detector_absolute_clear_delay_ms` ✅ (value: 30000)
 3. Verify existing entities still work:
    - `binary_sensor.bed_presence_detector_bed_occupied` ✅ (state: on)
    - `sensor.bed_presence_detector_presence_state_reason` ✅ (shows z-score and debounce info)
    - `number.bed_presence_detector_k_on_on_threshold_multiplier` ✅
    - `number.bed_presence_detector_k_off_off_threshold_multiplier` ✅
-   - `text_sensor.presence_state_reason`
+   - `sensor.bed_presence_detector_presence_change_reason`
 
 **Update Dashboard:**
 
@@ -343,17 +343,20 @@ Reset Conditions (abort debounce):
 
 ---
 
-## Next Steps: Phase 3
+## Next Steps: Phase 3 (Now Deployed)
 
-Phase 2 provides a stable, production-ready presence detection system. Future enhancements (Phase 3) could include:
+Phase 2 established the production-ready foundation. Phase 3 has since delivered:
 
-1. **Automated Calibration**: Services to collect baseline statistics and calculate optimal thresholds
-2. **Distance Windowing**: Ignore detections outside specific distance range (filter out fan, doorway)
-3. **MAD-based Statistics**: Robust outlier handling using Median Absolute Deviation
-4. **Sensor Fusion**: Optional integration of moving_energy for restlessness detection
-5. **Environmental Adaptation**: Self-tuning thresholds based on observed behavior
+1. **Automated Calibration** – ESPHome services (`calibrate_start_baseline`, `calibrate_reset_all`) collect samples, apply MAD-derived μ/σ, and broadcast change reasons.
+2. **Distance Windowing** – Runtime `distance_min_cm` / `distance_max_cm` numbers filter frames outside the bed zone.
+3. **MAD Statistics** – Outlier-resistant σ calculation replaces manual spreadsheet workflows.
 
-See `docs/presence-engine-spec.md` for Phase 3 specification.
+Remaining wishlist items (Phase 3.1+):
+- Home Assistant calibration wizard + helper entities
+- Optional moving-energy fusion / restlessness metrics
+- Flash persistence for calibration history
+
+See `docs/presence-engine-spec.md` for the deployed specification and upcoming enhancements.
 
 ---
 

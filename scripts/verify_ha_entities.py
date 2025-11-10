@@ -76,14 +76,19 @@ def main():
 
     # Define expected entities
     entities_to_check = [
-        ('binary_sensor.bed_occupied', 'Bed Occupied Binary Sensor'),
-        ('sensor.ld2410_still_energy', 'LD2410 Still Energy (primary input)'),
-        ('sensor.ld2410_moving_energy', 'LD2410 Moving Energy'),
-        ('sensor.ld2410_still_distance', 'LD2410 Still Distance'),
-        ('sensor.ld2410_moving_distance', 'LD2410 Moving Distance'),
-        ('number.k_on_on_threshold_multiplier', 'k_on Threshold Multiplier'),
-        ('number.k_off_off_threshold_multiplier', 'k_off Threshold Multiplier'),
-        ('text_sensor.presence_state_reason', 'Presence State Reason'),
+        ('binary_sensor.bed_presence_detector_bed_occupied', 'Bed Occupied Binary Sensor'),
+        ('sensor.bed_presence_detector_ld2410_still_energy', 'LD2410 Still Energy (primary input)'),
+        ('sensor.bed_presence_detector_ld2410_moving_energy', 'LD2410 Moving Energy'),
+        ('sensor.bed_presence_detector_ld2410_still_distance', 'LD2410 Still Distance'),
+        ('sensor.bed_presence_detector_presence_state_reason', 'Presence State Reason Text Sensor'),
+        ('sensor.bed_presence_detector_presence_change_reason', 'Presence Change Reason Text Sensor'),
+        ('number.bed_presence_detector_k_on_on_threshold_multiplier', 'k_on Threshold Multiplier'),
+        ('number.bed_presence_detector_k_off_off_threshold_multiplier', 'k_off Threshold Multiplier'),
+        ('number.bed_presence_detector_on_debounce_ms', 'On Debounce Timer'),
+        ('number.bed_presence_detector_off_debounce_ms', 'Off Debounce Timer'),
+        ('number.bed_presence_detector_absolute_clear_delay_ms', 'Absolute Clear Delay'),
+        ('number.bed_presence_detector_distance_min_cm', 'Distance Window Minimum'),
+        ('number.bed_presence_detector_distance_max_cm', 'Distance Window Maximum'),
     ]
 
     print(f"\n📋 Checking {len(entities_to_check)} entities...\n")

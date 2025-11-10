@@ -189,11 +189,11 @@ binary_sensor:
 - Runtime tunable thresholds AND timers
 - **Status**: Deployed to hardware 2025-11-07
 
-**Phase 3** ⏳ Planned:
-- Automated baseline calibration via Home Assistant services
-- Distance windowing to ignore zones
-- MAD (Median Absolute Deviation) robust statistics
-- **Status**: Service stubs exist but no implementation
+**Phase 3** ✅ Deployed:
+- Automated baseline calibration via ESPHome services (MAD statistics)
+- Distance windowing to ignore zones and noisy areas
+- Presence change reason telemetry + reset services
+- **Status**: Deployed 2025-11-08 (HA wizard still pending)
 
 ## Calibration Questions
 
@@ -203,17 +203,17 @@ binary_sensor:
 
 **Process**:
 1. Ensure bed is completely vacant
-2. Collect 30+ samples over 60 seconds
-3. Calculate mean (μ) and standard deviation (σ)
-4. Update firmware or use service (Phase 3) to apply new baseline
+2. Call `esphome.bed_presence_detector_calibrate_start_baseline` (duration_s ≥ 60) or run the legacy script
+3. MAD logic calculates μ (median) and σ (MAD × 1.4826)
+4. Results are applied immediately; optional `calibrate_reset_all` restores defaults
 
 **Why needed**:
 - Different sensors have different characteristics
 - Environmental conditions vary (room size, materials, interference)
 - Sensor position affects readings
 
-**Current method**: Manual using Python script (`scripts/collect_baseline.py`)
-**Phase 3**: Automated via Home Assistant services
+**Current method**: ESPHome service (`calibrate_start_baseline`) is recommended
+**Legacy option**: Python script (`scripts/collect_baseline.py`) for raw data exports
 
 ### How often should I recalibrate?
 
@@ -233,11 +233,12 @@ binary_sensor:
 
 ### Can I calibrate automatically from Home Assistant?
 
-**Not yet** - this is a **Phase 3 feature** (planned).
+**Yes.** Use `esphome.bed_presence_detector_calibrate_start_baseline` with a positive `duration_s`. The device collects
+samples, computes μ/σ via MAD, and updates runtime values on the fly. `Presence Change Reason` will report
+`calibration:completed` when finished.
 
-**Current Phase 2**: Calibration services exist (`esphome.bed_presence_detector_start_calibration`) but are placeholders that only log messages.
-
-**Workaround**: Use Python script `scripts/collect_baseline.py` and manually update firmware.
+**Need a UI?** A dedicated Home Assistant wizard is still pending; for now call the ESPHome service directly or wrap it
+in a simple HA script/button.
 
 ## Development Questions
 
@@ -248,7 +249,7 @@ cd esphome
 platformio test -e native
 ```
 
-**Test coverage** (14 tests, 355 lines):
+**Test coverage** (16 tests, 390+ lines):
 - ✅ Z-score calculation accuracy
 - ✅ State machine transitions (all 4 states)
 - ✅ Debounce timer behavior
@@ -297,7 +298,7 @@ platformio test -e native
 ### How do I contribute to this project?
 
 **Contribution areas**:
-1. **Phase 3 implementation**: Automated calibration services, MAD statistics
+1. **Calibration wizard + persistence**: HA UI helpers, flash storage for μ/σ snapshots
 2. **Documentation**: Tutorials, wiring diagrams, troubleshooting tips
 3. **Testing**: Hardware compatibility, edge case testing
 4. **Hardware**: 3D printable mounts (current STL is placeholder)

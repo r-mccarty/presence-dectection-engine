@@ -1,11 +1,14 @@
-# Bed Presence Engine Package - Phase 2
-# Z-score based presence detection with state machine and debouncing
+# Bed Presence Engine Package - Phase 3
+# Z-score presence detection with state machine, distance windowing, and calibration services
 
 binary_sensor:
   - platform: bed_presence_engine
     name: "Bed Occupied"
     id: bed_occupied
     energy_sensor: ld2410_still_energy  # Using still/static energy per LD2410 naming
+    distance_sensor: ld2410_still_distance
+    distance_min_cm: 0.0
+    distance_max_cm: 600.0
     k_on: 9.0   # Turn ON when z-score > 9.0 (9 std deviations)
     k_off: 4.0  # Turn OFF when z-score < 4.0 (4 std deviations)
     on_debounce_ms: 3000       # 3 seconds - sustained high signal required
@@ -14,9 +17,12 @@ binary_sensor:
     state_reason:
       name: "Presence State Reason"
       id: presence_state_reason
+    last_change_reason:
+      name: "Presence Change Reason"
+      id: presence_change_reason
 
 # Number inputs to allow threshold multiplier and debounce timer tuning from Home Assistant
-# Phase 2: Added debounce timer controls
+# Phase 2+: Debounce timer controls + Phase 3 distance windowing
 # Persistent across reboots (restore_value: true)
 number:
   - platform: template
@@ -102,3 +108,38 @@ number:
         - lambda: |-
             auto engine = id(bed_occupied);
             engine->update_abs_clear_delay_ms((unsigned long)x);
+
+  # Phase 3: Distance window controls (cm)
+  - platform: template
+    name: "Distance Min (cm)"
+    id: distance_min_input
+    min_value: 0
+    max_value: 600
+    step: 5
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: slider
+    unit_of_measurement: "cm"
+    on_value:
+      then:
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            engine->update_d_min_cm(x);
+
+  - platform: template
+    name: "Distance Max (cm)"
+    id: distance_max_input
+    min_value: 50
+    max_value: 600
+    step: 5
+    initial_value: 600
+    optimistic: true
+    restore_value: true
+    mode: slider
+    unit_of_measurement: "cm"
+    on_value:
+      then:
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            engine->update_d_max_cm(x);

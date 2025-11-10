@@ -215,7 +215,7 @@ This logic is too complex for a simple `lambda` filter; it requires a custom C++
 
 ---
 
-### **Phase 3: Environmental Hardening & Calibration Services**
+### **Phase 3: Environmental Hardening & Calibration Services** (✅ DEPLOYED 2025-11-08)
 
 **Objective:** Add advanced features that allow the sensor to adapt to its environment (distance windowing, fan filtering) and be controlled externally by the HA "Wizard" via services.
 
@@ -252,3 +252,4 @@ This logic is too complex for a simple `lambda` filter; it requires a custom C++
   3. From Home Assistant's Developer Tools \-\> Services, call the `calibrate.start_baseline` service while the room is empty. **Observe:** The device logs should show the calibration process. The subsequent detection behavior should be more accurate for that specific room's noise profile.  
   4. Change a few knobs to weird values. Call the `calibrate.reset_all` service. **Observe:** The knobs in the HA UI should return to their default values.
 
+**Status:** All device-side requirements shipped in v2025.11.08. Remaining work: Home Assistant calibration wizard + flash persistence.

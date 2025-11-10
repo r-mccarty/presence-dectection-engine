@@ -130,25 +130,24 @@ Reset Conditions (abort debounce):
 
 ---
 
-### Phase 3: Automated Calibration ⏳ PLANNED
+### Phase 3: Automated Calibration ✅ DEPLOYED
 
-**Objective:** Enable self-calibration and environmental adaptation.
+**Objective:** Enable self-calibration and environmental adaptation without reflashing firmware.
 
-**Planned Features:**
-- **Automated baseline calibration**: Collect data via Home Assistant service
-- **MAD (Median Absolute Deviation)**: Robust statistical analysis for outlier handling
-- **Distance windowing**: Ignore specific zones (e.g., doorway, fan)
-- **Calibration wizard**: Step-by-step UI in Home Assistant
-- **Persistent storage**: Save calibration data to flash
+**Implemented Features:**
+- **Automated baseline calibration**: `esphome.bed_presence_detector_calibrate_start_baseline` collects still-energy data for N seconds, computes μ/σ via MAD, and updates runtime variables immediately.
+- **MAD (Median Absolute Deviation)**: Resistant to outliers (e.g., a fan gust) when deriving σ. Minimum σ clamp prevents divide-by-zero.
+- **Distance windowing**: Frames whose still-distance fall outside `[distance_min_cm, distance_max_cm]` are ignored before state machine + calibration logic.
+- **Change-reason telemetry**: `text_sensor.presence_change_reason` publishes concise reason codes (`on:threshold_exceeded`, `off:abs_clear_delay`, `calibration:completed`).
+- **Reset services**: `calibrate_reset_all` / `reset_to_defaults` restore μ/σ, thresholds, debounce timers, and distance window to known-good defaults while republishing HA numbers.
 
-**Implementation Plan:**
-- Service handlers in C++ component (`start_calibration`, `stop_calibration`)
-- Sample collection and statistical analysis
-- MAD-based μ and σ calculation
-- Distance sensor integration for windowing
-- Flash storage for persistence
+**Implementation Notes:**
+- ESPHome services call new C++ helpers (`start_baseline_calibration`, `stop_baseline_calibration`, `reset_to_defaults`).
+- Sample collection uses bounded vectors (max 4096 samples) and finalizes automatically when the duration expires, even if no new samples arrive.
+- Distance window defaults to `[0cm, 600cm]` so existing deployments behave identically until tuned.
+- Flash persistence remains a future enhancement; values survive until reboot thanks to runtime storage.
 
-**Status:** Service stubs exist but no implementation. Target: Future release.
+**Status:** Deployed 2025-11-08 alongside 16 C++ unit tests + new e2e coverage. Home Assistant calibration wizard UI is still planned but device-side automation is complete.
 
 ---
 
@@ -413,13 +412,15 @@ number:
 ```
 
 **Entities Created:**
-- `binary_sensor.bed_occupied` - Main presence sensor (ON/OFF)
-- `text_sensor.presence_state_reason` - Debug info with z-score and timing
-- `number.k_on_on_threshold_multiplier` - ON threshold tuning
-- `number.k_off_off_threshold_multiplier` - OFF threshold tuning
-- `number.on_debounce_ms` - ON debounce timer
-- `number.off_debounce_ms` - OFF debounce timer
-- `number.abs_clear_delay_ms` - Absolute clear delay timer
+- `binary_sensor.bed_presence_detector_bed_occupied` - Main presence sensor (ON/OFF)
+- `sensor.bed_presence_detector_presence_state_reason` - Debug info with z-score and timing
+- `sensor.bed_presence_detector_presence_change_reason` - Reason codes for last transition/calibration event
+- `number.bed_presence_detector_k_on_on_threshold_multiplier` - ON threshold tuning
+- `number.bed_presence_detector_k_off_off_threshold_multiplier` - OFF threshold tuning
+- `number.bed_presence_detector_on_debounce_ms` - ON debounce timer
+- `number.bed_presence_detector_off_debounce_ms` - OFF debounce timer
+- `number.bed_presence_detector_absolute_clear_delay_ms` - Absolute clear delay timer
+- `number.bed_presence_detector_distance_min_cm` & `number.bed_presence_detector_distance_max_cm` - Distance window
 
 ---
 
@@ -431,7 +432,7 @@ number:
 
 **Approach:** Create a `SimplePresenceEngine` class that replicates Phase 2 logic without ESPHome dependencies. Mock time using a `current_time` parameter passed to the state machine.
 
-**Test Coverage (14 tests, 355 lines):**
+**Test Coverage (16 tests, 390+ lines):**
 
 1. **Z-Score Calculation** - Verify math accuracy
 2. **Initial State** - Confirm IDLE with binary sensor OFF
@@ -447,10 +448,12 @@ number:
 12. **State Reason Tracking** - Debug info includes z-score and timing
 13. **Edge Case: Zero Sigma** - Handle divide-by-zero
 14. **Edge Case: Very Large Values** - Handle numerical overflow
+15. **Distance Window Blocks Frames** - Frames outside `[d_min, d_max]` ignored
+16. **MAD Calibration** - Sample buffer computes median + MAD correctly
 
 **Run:** `cd esphome && platformio test -e native`
 
-**Status:** ✅ All 14 tests passing
+**Status:** ✅ All 16 tests passing
 
 **Example test:**
 ```cpp
@@ -487,17 +490,18 @@ void test_on_debounce_success() {
 
 **Approach:** Connect to live Home Assistant instance via WebSocket API, interact with real entities, verify behavior.
 
-**Test Coverage (9 test functions):**
+**Test Coverage (excerpt):**
 
 1. **Device Available** - Verify ESPHome device online
-2. **Entities Exist** - Check all expected entities present
+2. **Presence Sensor Exists** - Check `binary_sensor.bed_presence_detector_bed_occupied`
 3. **Threshold Tuning** - Set k_on/k_off, verify applied
-4. **State Transitions** - Trigger sensor, verify state changes
-5. **Debounce Behavior** - Brief signal doesn't trigger
-6. **State Reason** - Verify z-score reported correctly
-7. **Calibration Services** - Call services (placeholders in Phase 2)
-8. **Timer Tuning** - Set debounce timers, verify applied
-9. **Persistence** - Restart device, verify settings persisted
+4. **Debounce Timers** - Confirm timers exist + can be updated
+5. **Distance Window** - Verify distance_min/max numbers exist + accept updates
+6. **Calibration Services** - Ensure all start/stop/reset services are registered
+7. **Reset to Defaults** - Confirm Phase 3 defaults pushed back to HA entities
+8. **State Reason Sensor** - Text sensor returns descriptive z-score info
+9. **Change Reason Sensor** - Short reason codes published for each transition
+10. **Wizard Helpers** - Tests referencing future HA UI remain skipped until UI ships
 
 **Setup:**
 ```bash
@@ -508,7 +512,7 @@ export HA_TOKEN="your-token"
 pytest
 ```
 
-**Status:** Framework implemented, tests run but Phase 3 tests skipped
+**Status:** MAD calibration + distance window tests are active. HA wizard helper tests remain skipped until the UI lands.
 
 ---
 
@@ -542,6 +546,17 @@ pytest
    - Trigger sensor
    - Verify new threshold applied (check state reason z-score)
 
+6. **Distance window test:**
+   - Place a moving object just outside the desired bed zone
+   - Reduce `distance_max_cm` until the object no longer triggers presence
+   - Confirm entering the bed (within the window) still triggers PRESENT
+
+7. **Calibration service test:**
+   - Ensure bed is empty, then call `esphome.bed_presence_detector_calibrate_start_baseline` (60s)
+   - Watch ESPHome logs for sample counts and MAD summary
+   - After completion, verify `Presence Change Reason` reports `calibration:completed`
+   - Optionally call `...calibrate_reset_all` to return to default μ/σ
+
 ---
 
 ## Performance Characteristics
@@ -554,7 +569,7 @@ pytest
 
 **Memory Usage:**
 - Class instance: ~100 bytes
-- No dynamic allocation
+- Calibration buffer: up to 4096 float samples (~16KB) allocated only while calibration runs
 - Flash: ~20KB for component code
 
 **Latency:**
@@ -572,33 +587,27 @@ pytest
 
 ## Future Architecture Considerations
 
-### Phase 3 Enhancements
+### Next Enhancements
 
-**Calibration Data Structure:**
+**Persisted Calibration Data:**
 ```cpp
 struct CalibrationData {
   float mu_still;
   float sigma_still;
-  float k_on;
-  float k_off;
   uint32_t sample_count;
-  uint32_t timestamp;
+  uint32_t collected_at_epoch;
 };
 ```
+- Store to ESP32 preferences after each successful calibration
+- Auto-restore on boot and expose timestamp via diagnostics sensor
 
-**Distance Windowing:**
-```cpp
-struct DistanceWindow {
-  uint16_t min_cm;
-  uint16_t max_cm;
-  bool enabled;
-};
-```
+**Calibration Wizard UI:**
+- Lovelace dashboard or blueprint to guide vacant/occupied sampling
+- Trigger ESPHome services + visualize progress and MAD summary
 
-**Persistent Storage:**
-- Use ESP32 preferences API
-- Store calibration data in flash
-- Auto-restore on boot
+**Advanced Analytics:**
+- Optional moving-energy fusion for restlessness detection
+- Rolling MAD window for slow drift detection
 
 ### Potential Optimizations
 

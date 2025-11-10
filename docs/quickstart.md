@@ -100,7 +100,7 @@ The device should **auto-discover** in Home Assistant:
 **Entities created** (8 total):
 - `binary_sensor.bed_occupied` - Main presence sensor
 - `text_sensor.presence_state_reason` - Debug info (state, z-score, timers)
-- `sensor.ld2410_still_energy` - Raw sensor reading (%)
+- `sensor.bed_presence_detector_ld2410_still_energy` - Raw sensor reading (%)
 - `number.k_on_on_threshold_multiplier` - ON threshold (default: 9.0)
 - `number.k_off_off_threshold_multiplier` - OFF threshold (default: 4.0)
 - `number.on_debounce_ms` - ON debounce timer (default: 3000ms)
@@ -138,12 +138,12 @@ Then: Settings → Automations & Scenes → Create Automation → Use Blueprint
 
 1. **Empty bed test**:
    - Ensure bed is completely vacant
-   - Monitor `sensor.ld2410_still_energy` in Home Assistant (Developer Tools → States)
+   - Monitor `sensor.bed_presence_detector_ld2410_still_energy` in Home Assistant (Developer Tools → States)
    - Typical empty bed reading: 3-10%
 
 2. **Occupied bed test**:
    - Get into bed and lie still
-   - Monitor `sensor.ld2410_still_energy`
+   - Monitor `sensor.bed_presence_detector_ld2410_still_energy`
    - Typical occupied bed reading: 30-70%
 
 3. **Adjust thresholds if needed**:
@@ -151,37 +151,39 @@ Then: Settings → Automations & Scenes → Create Automation → Use Blueprint
    - If false negatives (doesn't detect when occupied): Decrease `k_on` to 8.0 or 7.0
    - For slow clearing when still: Increase `abs_clear_delay_ms` to 60000 (60s)
 
-### Full Calibration (Python Script - Recommended)
+### Full Calibration (ESPHome Services - Recommended)
 
-**Requires**: Python script access (run from ubuntu-node or with SSH tunnel from Codespace)
+1. Empty the bed completely and verify the desired detection zone is within the distance window.
+2. Home Assistant → Developer Tools → Services:
 
-```bash
-# Ensure bed is completely empty
-cd scripts
-python3 collect_baseline.py
-# Follow prompts, script collects 30 samples over 60 seconds
-# Record mean (μ) and std dev (σ) from output
+```
+service: esphome.bed_presence_detector_calibrate_start_baseline
+data:
+  duration_s: 60
 ```
 
-**Update firmware with new baseline** (future feature - Phase 3):
-- Currently: Edit `esphome/custom_components/bed_presence_engine/bed_presence.h` manually
-- Phase 3: Use automated calibration services
+3. Watch ESPHome logs or the `Presence Change Reason` sensor for `calibration:completed`.
+4. Validate behavior (lie in bed, leave bed). Rerun if the room or bedding changes again.
+5. Need to roll back? Call `esphome.bed_presence_detector_calibrate_reset_all`.
 
-See [calibration.md](calibration.md) for detailed calibration procedures.
+> **Need raw CSV data?** `scripts/collect_baseline.py` still works, but Phase 3 automation keeps firmware and Home
+> Assistant perfectly aligned without manual edits.
+
+See [calibration.md](calibration.md) for the detailed workflow plus the legacy script instructions.
 
 ## Testing Your Setup
 
 ### Test 1: Verify Sensor Readings
 
 1. Developer Tools → States → Search "ld2410"
-2. View `sensor.ld2410_still_energy`:
+2. View `sensor.bed_presence_detector_ld2410_still_energy`:
    - Empty bed: Should be low (3-10%)
    - Occupied bed: Should be high (30-70%)
 
 ### Test 2: Verify Presence Detection
 
 1. Developer Tools → States → Search "bed_occupied"
-2. View `binary_sensor.bed_occupied`:
+2. View `binary_sensor.bed_presence_detector_bed_occupied`:
    - Empty bed: Should be "off" (IDLE state)
    - Get into bed: Should transition to "on" after ~3 seconds (DEBOUNCING_ON → PRESENT)
    - Get out of bed: Should transition to "off" after ~5 seconds + 30 second delay (DEBOUNCING_OFF → IDLE)
@@ -189,9 +191,16 @@ See [calibration.md](calibration.md) for detailed calibration procedures.
 ### Test 3: Monitor State Transitions
 
 1. Developer Tools → States → Search "presence_state_reason"
-2. View `text_sensor.presence_state_reason`:
+2. View `sensor.bed_presence_detector_presence_state_reason`:
    - Example: `PRESENT (z=12.34, high_conf_age=5000ms, abs_clear_ready=no)`
    - Watch state machine transitions in real-time
+
+### Test 4: Inspect Change Reasons
+
+1. Developer Tools → States → Search "presence_change_reason"
+2. View `sensor.bed_presence_detector_presence_change_reason`:
+   - Example values: `on:threshold_exceeded`, `off:abs_clear_delay`, `calibration:completed`
+   - Confirms why the last state flip (or calibration event) occurred
 
 ## Tuning for Your Environment
 
@@ -225,10 +234,10 @@ All adjustments can be made in Home Assistant without reflashing firmware.
 - Temporal filtering with configurable debounce timers
 - Absolute clear delay to prevent premature clearing
 
-**Phase 3** ⏳ Planned:
-- Automated baseline calibration via Home Assistant services
-- Distance windowing to ignore specific zones
-- MAD (Median Absolute Deviation) statistical analysis
+**Phase 3** ✅ Deployed:
+- Automated baseline calibration via ESPHome services (MAD statistics)
+- Distance windowing to ignore specific zones/noise sources
+- Presence change reason telemetry + reset services (HA wizard still pending)
 
 ## Next Steps
 

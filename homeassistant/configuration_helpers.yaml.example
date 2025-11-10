@@ -45,12 +45,12 @@ script:
           entity_id: input_select.calibration_step
         data:
           option: "Calibrating Vacant"
-      - service: esphome.bed_presence_detector_start_calibration
+      - service: esphome.bed_presence_detector_calibrate_start_baseline
         data:
-          mode: "vacant"
+          duration_s: 60
       - delay:
           seconds: 30
-      - service: esphome.bed_presence_detector_stop_calibration
+      - service: esphome.bed_presence_detector_calibrate_stop
       - service: input_select.select_option
         target:
           entity_id: input_select.calibration_step
@@ -68,12 +68,12 @@ script:
           entity_id: input_select.calibration_step
         data:
           option: "Calibrating Occupied"
-      - service: esphome.bed_presence_detector_start_calibration
+      - service: esphome.bed_presence_detector_calibrate_start_baseline
         data:
-          mode: "occupied"
+          duration_s: 60
       - delay:
           seconds: 30
-      - service: esphome.bed_presence_detector_stop_calibration
+      - service: esphome.bed_presence_detector_calibrate_stop
       - service: input_select.select_option
         target:
           entity_id: input_select.calibration_step

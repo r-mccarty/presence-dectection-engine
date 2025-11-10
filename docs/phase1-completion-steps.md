@@ -462,11 +462,10 @@ Once Phase 1 is complete and validated:
 - Update dashboard with debounce controls
 
 ### Phase 3: Advanced Calibration
-- Implement automated baseline collection service
-- Add MAD (Median Absolute Deviation) statistical analysis
-- Implement distance windowing (ignore specific zones)
-- Add calibration progress tracking
-- Create calibration UI wizard
+- ✅ Automated baseline collection service (`calibrate_start_baseline`)
+- ✅ MAD (Median Absolute Deviation) statistical analysis
+- ✅ Distance windowing (ignore specific zones)
+- 🔜 Calibration helper entities & UI wizard (commented in dashboard)
 
 ---
 

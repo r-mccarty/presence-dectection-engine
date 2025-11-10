@@ -1,34 +1,80 @@
-# Calibration Services Package - Phase 1
-# Provides ESPHome services for the Home Assistant calibration wizard
-# Phase 1: Placeholder services for future calibration implementation
+# Calibration & Reset Services Package - Phase 3
+# Provides ESPHome services for MAD-based baseline calibration and resets
 
 api:
   services:
-    # Service: Start collecting calibration samples
-    # TODO Phase 3: Implement actual baseline data collection
-    - service: start_calibration
+    # Primary service: start MAD-based baseline calibration
+    - service: start_calibration  # Legacy name (Phase 1/2)
       variables:
-        duration_s: int  # Duration in seconds to collect samples
+        duration_s: int
       then:
         - logger.log:
-            format: "Starting calibration for %d seconds (placeholder)"
+            format: "Starting baseline calibration for %d seconds"
             args: ['duration_s']
-        # Phase 3: Will implement energy sample collection here
-
-    # Service: Stop calibration and compute thresholds
-    # TODO Phase 3: Implement MAD-based threshold calculation
-    - service: stop_calibration
-      then:
-        - logger.log: "Stopping calibration (placeholder)"
-        # Phase 3: Will compute μ and σ from collected samples
-
-    # Service: Reset to factory defaults (Phase 1 parameters)
-    - service: reset_to_defaults
-      then:
-        - logger.log: "Resetting to Phase 1 factory defaults"
         - lambda: |-
             auto engine = id(bed_occupied);
-            engine->update_k_on(4.0);
-            engine->update_k_off(2.0);
-            id(k_on_input).publish_state(4.0);
-            id(k_off_input).publish_state(2.0);
+            if (duration_s <= 0) {
+              ESP_LOGE("calibration", "Duration must be > 0 seconds");
+              return;
+            }
+            engine->start_baseline_calibration(static_cast<uint32_t>(duration_s));
+
+    # Preferred Phase 3 service namespace (mirrors docs)
+    - service: calibrate_start_baseline
+      variables:
+        duration_s: int
+      then:
+        - logger.log:
+            format: "[Phase3] Starting MAD calibration for %d seconds"
+            args: ['duration_s']
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            if (duration_s <= 0) {
+              ESP_LOGE("calibration", "Duration must be > 0 seconds");
+              return;
+            }
+            engine->start_baseline_calibration(static_cast<uint32_t>(duration_s));
+
+    # Stop service finishes immediately with whatever samples we have
+    - service: stop_calibration
+      then:
+        - logger.log: "Stopping calibration and computing MAD statistics"
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            engine->stop_baseline_calibration();
+
+    - service: calibrate_stop
+      then:
+        - logger.log: "[Phase3] Stopping calibration and computing MAD statistics"
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            engine->stop_baseline_calibration();
+
+    # Reset service: restore known-good defaults for all knobs + baseline
+    - service: reset_to_defaults  # Legacy name
+      then:
+        - logger.log: "Resetting presence engine to Phase 3 defaults"
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            engine->reset_to_defaults();
+            id(k_on_input).publish_state(9.0);
+            id(k_off_input).publish_state(4.0);
+            id(on_debounce_input).publish_state(3000);
+            id(off_debounce_input).publish_state(5000);
+            id(abs_clear_delay_input).publish_state(30000);
+            id(distance_min_input).publish_state(0);
+            id(distance_max_input).publish_state(600);
+
+    - service: calibrate_reset_all
+      then:
+        - logger.log: "[Phase3] Resetting presence engine + knobs to defaults"
+        - lambda: |-
+            auto engine = id(bed_occupied);
+            engine->reset_to_defaults();
+            id(k_on_input).publish_state(9.0);
+            id(k_off_input).publish_state(4.0);
+            id(on_debounce_input).publish_state(3000);
+            id(off_debounce_input).publish_state(5000);
+            id(abs_clear_delay_input).publish_state(30000);
+            id(distance_min_input).publish_state(0);
+            id(distance_max_input).publish_state(600);

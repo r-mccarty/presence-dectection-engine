@@ -11,7 +11,7 @@ This project implements a **state machine with temporal filtering** and **statis
 
 *   **Phase 1: Z-Score Detection** - Core statistical engine with hysteresis ✅ **COMPLETE**
 *   **Phase 2: State Machine + Debouncing** - Temporal filtering for reliability ✅ **DEPLOYED**
-*   **Phase 3: Automated Calibration** - Future enhancement ⏳ **PLANNED**
+*   **Phase 3: Automated Calibration + Distance Windowing** - MAD statistics + HA services ✅ **DEPLOYED**
 
 For a complete technical breakdown, see the [**Project Architecture**](docs/ARCHITECTURE.md).
 
@@ -19,9 +19,11 @@ For a complete technical breakdown, see the [**Project Architecture**](docs/ARCH
 
 *   **On-Device Statistical Analysis** - All z-score calculations run on ESP32 for maximum speed
 *   **4-State Machine with Debouncing** - Eliminates false positives/negatives through temporal filtering
-*   **Runtime Tunable** - Adjust thresholds and timers via Home Assistant without reflashing
+*   **Distance Windowing** - Ignore noise sources outside the configured min/max range
+*   **Automated Calibration** - MAD-based baseline service (`calibrate_start_baseline`) tunes μ/σ in-place
+*   **Runtime Tunable** - Adjust thresholds, timers, and distance window via Home Assistant without reflashing
 *   **Transparent Dashboard** - Live visualization of energy levels, z-scores, and state transitions
-*   **Fully Tested** - 14 C++ unit tests plus Python E2E integration tests
+*   **Fully Tested** - 16 C++ unit tests plus Python E2E integration tests
 
 ## 📚 Documentation
 
@@ -74,7 +76,7 @@ Once the device connects to Home Assistant:
 
 1. **Deploy Dashboard**: Copy `homeassistant/dashboards/bed_presence_dashboard.yaml` to Home Assistant
 2. **Tune Parameters**: Adjust thresholds and debounce timers via the Configuration view
-3. **Monitor**: Use `text_sensor.presence_state_reason` for real-time debugging
+3. **Monitor**: Use `text_sensor.presence_state_reason` + `text_sensor.presence_change_reason` for real-time debugging
 
 See the [**Quick Start Guide**](docs/quickstart.md) for detailed instructions.
 
@@ -110,7 +112,7 @@ Contributions are welcome! Please see the [**Contributing Guide**](CONTRIBUTING.
 - CI/CD workflows
 
 **Areas for contribution:**
-- Phase 3 implementation (automated calibration)
+- Home Assistant calibration wizard + UI helpers
 - Real-world tuning and optimization
 - Hardware assets (3D printable mounts, wiring diagrams)
 - Documentation improvements

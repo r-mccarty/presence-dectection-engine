@@ -5,9 +5,9 @@ Guidance for agents editing firmware, custom components, and PlatformIO tests un
 - `docs/DEVELOPMENT_WORKFLOW.md` for the **critical two-machine workflow**
 - `docs/presence-engine-spec.md` for engineering requirements
 
-## Current Firmware Status (Phase 2 DEPLOYED)
-- **Status**: Phase 2 is **DEPLOYED** and fully operational on hardware
-- **Engine**: `custom_components/bed_presence_engine/` implements 4-state debounced presence engine
+## Current Firmware Status (Phase 3 DEPLOYED)
+- **Status**: Phase 3 is **DEPLOYED** and fully operational on hardware
+- **Engine**: `custom_components/bed_presence_engine/` implements 4-state debounced presence engine with distance windowing & calibration
 - **Algorithm**: Z-score statistical analysis of `ld2410_still_energy`
   - Baseline: μ = 6.7%, σ = 3.5% (calibrated 2025-11-06, empty bed)
   - Thresholds: k_on = 9.0, k_off = 4.0
@@ -15,9 +15,12 @@ Guidance for agents editing firmware, custom components, and PlatformIO tests un
   - OFF threshold: 6.7 + (4.0 × 3.5) = 20.7% still energy
 - **State machine**: `IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF`
   - Debounce timers: on = 3000ms, off = 5000ms, absolute_clear = 30000ms
+  - Distance window: d_min = 0cm, d_max = 600cm (runtime tunable)
   - All parameters are runtime-tunable from Home Assistant
+- **Calibration**: MAD-based baseline collection via ESPHome services (`calibrate_start_baseline`, `calibrate_reset_all`)
+- **Last-change telemetry**: `Presence Change Reason` text sensor emits reason codes for each transition
 - **Runtime tuning**: Template `number` entities in `packages/presence_engine.yaml` call `update_*` methods
-- **Tests**: 14 comprehensive C++ unit tests, all passing (`platformio test -e native`)
+- **Tests**: 16 comprehensive C++ unit tests, all passing (`platformio test -e native`)
 
 ## ⚠️ CRITICAL: Two-Machine Workflow
 
@@ -49,8 +52,8 @@ Guidance for agents editing firmware, custom components, and PlatformIO tests un
 5. **Verify**: Check ESPHome logs and Home Assistant state
 
 ## Key Files
-- `bed-presence-detector.yaml` – main entry point; includes packages for hardware, presence engine, calibration services placeholder, diagnostics.
-- `packages/presence_engine.yaml` – binary sensor definition, threshold + debounce template numbers, text sensor output.
+- `bed-presence-detector.yaml` – main entry point; includes packages for hardware, presence engine, calibration services, diagnostics.
+- `packages/presence_engine.yaml` – binary sensor definition, threshold + debounce + distance template numbers, text sensors.
 - `custom_components/bed_presence_engine/bed_presence.h/.cpp` – C++ engine. Read header before editing implementation.
 - `custom_components/bed_presence_engine/binary_sensor.py` – Schema definitions; update when adding options (e.g., new timers).
 - `test/test_presence_engine.cpp` – PlatformIO unit tests; extend when modifying state machine or thresholds.
@@ -67,7 +70,7 @@ Guidance for agents editing firmware, custom components, and PlatformIO tests un
 | --- | --- | --- |
 | Adjust defaults | `packages/presence_engine.yaml`, `bed_presence.cpp` constants | Update docs + dashboard defaults too. |
 | Add telemetry | `bed_presence.cpp`, `packages/diagnostics.yaml` | Ensure sensors exist in HA dashboard. |
-| Implement Phase 3 calibration | `bed_presence.cpp/.h`, `packages/services_calibration.yaml`, HA helpers | Follow spec in `docs/presence-engine-spec.md`. |
+| Tune calibration defaults | `bed_presence.cpp/.h`, `packages/services_calibration.yaml`, `packages/presence_engine.yaml` | Update docs + HA dashboard if defaults move. |
 
 ## Troubleshooting
 

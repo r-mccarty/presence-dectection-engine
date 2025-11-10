@@ -10,36 +10,41 @@ Guidance for agents editing Home Assistant assets in this directory (`homeassist
 homeassistant/
 ├── blueprints/automation/bed_presence_automation.yaml   # Automation blueprint for presence events
 ├── dashboards/bed_presence_dashboard.yaml               # Lovelace dashboard configuration
-└── configuration_helpers.yaml.example                   # Phase 3 calibration helpers (planned)
+└── configuration_helpers.yaml.example                   # Calibration wizard scaffolding (pending UI)
 ```
 
-## Current Status: Phase 2 DEPLOYED
+## Current Status: Phase 3 DEPLOYED
 
-**Phase 2 is fully operational.** The dashboard and blueprint expose:
+**Phase 3 firmware is fully operational.** The dashboard and blueprint expose:
 
 ### Primary Entities
 - **Binary Sensor**: `binary_sensor.bed_presence_detector_bed_occupied` (debounced presence state)
 - **State Reason**: `text_sensor.bed_presence_detector_presence_state_reason` (z-score + timer diagnostics)
+- **Change Reason**: `text_sensor.bed_presence_detector_presence_change_reason` (reason codes for latest transition)
 
 ### Configuration Controls (Runtime Tunable)
 - **Thresholds**:
   - `number.bed_presence_detector_k_on_on_threshold_multiplier` (default: 9.0)
   - `number.bed_presence_detector_k_off_off_threshold_multiplier` (default: 4.0)
-- **Debounce Timers** (Phase 2 addition):
-  - `number.bed_presence_detector_on_debounce_timer_ms` (default: 3000ms)
-  - `number.bed_presence_detector_off_debounce_timer_ms` (default: 5000ms)
+- **Debounce Timers**:
+  - `number.bed_presence_detector_on_debounce_ms` (default: 3000ms)
+  - `number.bed_presence_detector_off_debounce_ms` (default: 5000ms)
   - `number.bed_presence_detector_absolute_clear_delay_ms` (default: 30000ms)
+- **Distance Window**:
+  - `number.bed_presence_detector_distance_min_cm` (default: 0cm)
+  - `number.bed_presence_detector_distance_max_cm` (default: 600cm)
 
 ### Diagnostic Sensors
 - `sensor.bed_presence_detector_ld2410_still_energy` (raw sensor data, percent)
 - `sensor.bed_presence_detector_wifi_signal_percent` (connectivity)
 - `sensor.bed_presence_detector_uptime` (device uptime)
 - `text_sensor.bed_presence_detector_esphome_version` (firmware version)
+- `text_sensor.bed_presence_detector_presence_change_reason` (recent state-change cause)
 
-### Phase 3 (Planned, Not Yet Implemented)
-- Calibration wizard (currently commented in dashboard)
-- Helper entities (template in `configuration_helpers.yaml.example`)
-- Automated baseline calibration services (stubs exist but only log messages)
+### Phase 3 (Firmware Deployed, Wizard Pending)
+- Calibration wizard cards in the dashboard remain commented until the HA helper entities are finalized
+- `configuration_helpers.yaml.example` contains the planned helper entity scaffolding (keep updated)
+- ESPHome calibration/reset services are live; UI buttons or scripts can call them today
 
 ## Editing Guidelines
 - **YAML style**: 2-space indentation, descriptive `name`/`label` strings (these render directly in HA UI)
@@ -58,7 +63,7 @@ homeassistant/
 - **Trigger**: State changes of `binary_sensor.bed_presence_detector_bed_occupied`
 - **Actions**: Separate sequences for presence detected (→ on) and presence cleared (→ off)
 - **Filters**: Optional time windows, person presence conditions
-- **Future**: When Phase 3 calibration is implemented, add calibration service triggers as optional actions
+- **Future**: Once the HA wizard ships, expose helper inputs/actions that trigger `calibrate_start_baseline` + reset services
 
 When modifying:
 - Test blueprint import in Home Assistant UI
@@ -93,7 +98,7 @@ When modifying:
    - ESPHome version
    - IP address
 
-5. **Calibration Wizard (commented)** – Phase 3 planned feature, leave commented
+5. **Calibration Wizard (commented)** – Phase 3 UI pending; leave commented until helper entities are ready
 
 **Critical**: Ensure all default values match firmware (k_on=9.0, k_off=4.0, timers=3s/5s/30s). Update `docs/quickstart.md` screenshots if layout changes.
 
@@ -137,6 +142,6 @@ pytest -v
 ### Configuration Issues
 - **Debounce controls not applying**: Verify ESPHome firmware has `update_*` methods, check HA logs for service call errors
 - **Thresholds reset on reboot**: Ensure ESPHome template numbers have `restore_value: true`
-- **Calibration services return errors**: Phase 3 not yet implemented, services only log messages
+- **Calibration services return errors**: Confirm `duration_s > 0`, check ESPHome logs for `calibration:insufficient_samples`, widen the distance window temporarily if needed
 
 For detailed troubleshooting, see `../docs/troubleshooting.md`. For repo-wide context, see `../AGENTS.md`.

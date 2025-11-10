@@ -1,90 +1,86 @@
 # Calibration Guide
 
-Reliable calibration keeps the z-score based detector stable across different rooms and beds. This guide
-describes how the current Phase 1 and Phase 2 workflow operates today and highlights the planned Phase 3
-automation.
+Reliable calibration keeps the z-score based detector stable across different rooms and beds. Phase 3 introduced
+fully automated, on-device calibration so you no longer need to edit firmware or run external scripts—everything
+happens through ESPHome services and Home Assistant.
 
 ## Phase Overview
 
-- **Phase 1 (baseline z-score) and Phase 2 (state machine + debouncing)** use a **semi-automated script** to
-  capture a vacant-bed baseline and then require a manual firmware update + Home Assistant tuning.
-- **Phase 3 (planned)** will replace the script/manual steps with an in-dashboard calibration wizard that
-  guides the operator through vacant/occupied sampling and writes results back automatically.
+- **Phase 1 & 2** – Manual script + firmware edit path (still available for debugging or data export)
+- **Phase 3** – Automated MAD calibration, distance windowing, and reset services (current production workflow)
 
-> **Note:** The script-driven process intentionally focuses on the vacant baseline. Occupied validation is
-> performed manually by watching the Home Assistant entities after flashing the updated firmware.
+> **Recommendation:** Use the Phase 3 automated workflow for all new calibrations. The legacy script is only
+> needed when you want raw CSV data or offline analysis.
 
-## Phase 1 & 2 Calibration Workflow (Current)
+---
+
+## Phase 3 Automated Workflow (Recommended)
 
 ### 1. Prepare the environment
+1. Position the LD2410 sensor exactly where it will live.
+2. Empty the bed completely (no people, pets, or large objects).
+3. Set `number.bed_presence_detector_distance_min_cm` / `distance_max_cm` so the intended bed zone is inside the
+   window and nearby noise sources (doorway, fan) are excluded.
+4. Open Home Assistant → Developer Tools → Services or use the ESPHome web UI for the device.
 
-1. Place the LD2410 sensor in its deployment location and verify it reports `ld2410_still_energy` in Home
-   Assistant.
-2. Empty the bed completely (no people, pets, or objects) and close the bedroom door to reduce motion.
-3. Run calibration from the Ubuntu node that has network access to Home Assistant and (if needed) USB access
-   to the M5Stack.
+### 2. Start baseline collection
+Call either service (both map to the same device-side implementation):
 
-### 2. Collect a vacant baseline with the script
-
-```bash
-ssh ubuntu-node
-cd ~/bed-presence-sensor
-export HA_TOKEN="<your-long-lived-token>"
-python3 scripts/collect_baseline.py
+```
+service: esphome.bed_presence_detector_calibrate_start_baseline
+data:
+  duration_s: 60
 ```
 
-The script samples 30 still-energy readings over 60 seconds, prints the mean (`μ`) and standard deviation
-(`σ`), and generates a ready-to-paste code snippet. Results are also saved to `baseline_results.txt` for
-auditing.
+Guidelines:
+- `duration_s` must be > 0. 60 seconds is the default; 90–120 seconds is helpful in noisy rooms.
+- Samples are captured only when frames fall inside the configured distance window.
+- You can also call the legacy alias `esphome.bed_presence_detector_start_calibration`.
 
-### 3. Apply baseline constants to the firmware
+### 3. Monitor progress
+- **ESPHome logs** (`esphome logs bed-presence-detector.yaml`) show sample counts and MAD summary.
+- **Text sensors**:
+  - `sensor.bed_presence_detector_presence_state_reason` reports verbose status (`Calibration complete: μ=...`).
+  - `sensor.bed_presence_detector_presence_change_reason` transitions to `calibration:started`, then
+    `calibration:completed` or `calibration:insufficient_samples`.
+- The device auto-finalizes when the timer expires or when you call `esphome.bed_presence_detector_calibrate_stop`.
 
-1. Copy the four `mu_*` / `sigma_*` lines from the script output.
-2. Update the defaults in `esphome/custom_components/bed_presence_engine/bed_presence.h`.
-3. Commit the change so the collected baseline is tracked alongside firmware updates.
+### 4. Validate the new baseline
+1. Check Home Assistant graphs—`ld2410_still_energy` z-scores should sit near 0 with an empty bed.
+2. Lie in the bed; the binary sensor should enter PRESENT after the on-debounce interval using the new μ/σ.
+3. If anything looks off, rerun calibration or adjust `k_on`/`k_off` until satisfied.
 
-The `mu_still_` / `sigma_still_` values drive the z-score calculation for both Phase 1 and Phase 2. The
-`mu_stat_` / `sigma_stat_` placeholders remain aligned with the same numbers until Phase 3 introduces moving
-energy fusion.
+### 5. Reset if needed
+If you ever need to roll back to the known-good defaults:
 
-### 4. Recompile, flash, and confirm telemetry
-
-```bash
-cd esphome
-esphome compile bed-presence-detector.yaml
-esphome run bed-presence-detector.yaml  # Flash via USB from ubuntu-node
+```
+service: esphome.bed_presence_detector_calibrate_reset_all
 ```
 
-After flashing, confirm that Home Assistant shows fresh sensor updates for `sensor.bed_presence_detector_`
-entities and that the binary sensor reports `OFF` while the bed stays empty.
+This resets μ/σ, thresholds, debounce timers, and distance window, and republishes the default values to the
+Home Assistant number entities. The legacy alias `esphome.bed_presence_detector_reset_to_defaults` remains
+available.
 
-### 5. Tune thresholds and timers from Home Assistant
+---
 
-1. Lie in bed and verify `binary_sensor.bed_presence_detector_bed_occupied` transitions to `ON` after the
-   on-debounce interval completes (3 s by default in Phase 2).
-2. Use the device controls exposed by the ESPHome integration to refine behavior:
-   - `k_on (ON Threshold Multiplier)` slider widens or narrows the entry threshold.
-   - `k_off (OFF Threshold Multiplier)` slider governs how quickly the system clears when energy drops.
-   - Phase 2 only: adjust `On Debounce Timer (ms)`, `Off Debounce Timer (ms)`, and `Absolute Clear Delay (ms)`
-     number inputs if you need slower or faster transitions.
-3. Document any non-default values so they can be reapplied after firmware updates.
+## Legacy Script Workflow (Optional)
 
-If the binary sensor chatters while occupied, increase `k_on` or lengthen the on-debounce timer. If it takes
-too long to clear after leaving the bed, lower `k_off` or shorten the off-debounce/absolute clear delays.
+The original Phase 1/2 process is still included for operators who want raw sample files or need to run entirely
+offline. Workflow summary:
+
+1. SSH to ubuntu-node and run `python3 scripts/collect_baseline.py` (requires `HA_TOKEN`).
+2. The script samples 30 readings over 60 seconds, prints μ/σ, and writes `baseline_results.txt`.
+3. Manually copy the `mu_*` / `sigma_*` constants into `bed_presence.h`, recompile, and flash firmware.
+
+Use this path only when you must capture data outside of ESPHome (e.g., to compare against external analytics).
+Otherwise, rely on the automated services to keep firmware and Home Assistant completely in sync.
+
+---
 
 ## Maintenance Cadence
 
-- Re-run the script whenever the bedroom layout, mattress, or sensor placement changes materially.
-- Re-verify thresholds seasonally if bedding thickness or HVAC patterns alter the still-energy baseline.
-- Store the generated `baseline_results.txt` snapshots in version control for traceability.
-
-## Looking Ahead to Phase 3
-
-Phase 3 will deliver an interactive calibration wizard inside Home Assistant. It will:
-
-- Orchestrate vacant and occupied sampling without leaving the dashboard.
-- Update firmware baseline constants and helper entities automatically.
-- Provide recommended threshold/debounce values derived from Median Absolute Deviation (MAD) analysis.
-
-Until that wizard ships, continue using the script-driven workflow described above for reliable Phase 1 and
-Phase 2 operation.
+- Re-run the calibration service whenever you relocate the sensor, change bedding significantly, or notice drift.
+- Keep a note of the `calibration:completed` timestamp (visible in ESPHome logs and the change-reason sensor) for
+  troubleshooting.
+- Seasonal HVAC changes: rerun the automated calibration and optionally snapshot the resulting μ/σ in your release
+  notes for traceability.

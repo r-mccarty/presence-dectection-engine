@@ -337,7 +337,8 @@ float sigma_still_{3.5f};  // Std dev still energy (empty bed)
    - With empty bed, z-score should be near 0 (typically -2.0 to 2.0)
    - With occupied bed, z-score should be > 9.0
 
-**Note:** Phase 3 will automate this process via calibration services.
+**Note:** Phase 3 automation is live—prefer `esphome.bed_presence_detector_calibrate_start_baseline` unless you
+need offline/raw data. Manual edits remain documented here for legacy workflows.
 
 ---
 

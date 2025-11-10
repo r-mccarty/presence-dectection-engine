@@ -22,9 +22,9 @@ The project is deeply integrated with Home Assistant, allowing for real-time mon
 
 The project follows a 3-phase development roadmap:
 
-*   **Phase 1 (Complete):** Z-Score based detection with hysteresis.
-*   **Phase 2 (Deployed):** State Machine with debouncing for temporal filtering.
-*   **Phase 3 (Planned):** Automated calibration.
+*   **Phase 1 (Complete):** Z-score based detection with hysteresis.
+*   **Phase 2 (Deployed):** State machine with debouncing for temporal filtering.
+*   **Phase 3 (Deployed):** Automated calibration + distance windowing using MAD statistics.
 
 The C++ presence engine implements a 4-state machine: `IDLE`, `DEBOUNCING_ON`, `PRESENT`, and `DEBOUNCING_OFF`. State transitions are determined by z-score values and debounce timers.
 

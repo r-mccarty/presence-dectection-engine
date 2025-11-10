@@ -31,6 +31,7 @@ sensor:
       name: "LD2410 Moving Distance"
     still_distance:
       name: "LD2410 Still Distance"
+      id: ld2410_still_distance
     moving_energy:
       name: "LD2410 Moving Energy"
       id: ld2410_moving_energy

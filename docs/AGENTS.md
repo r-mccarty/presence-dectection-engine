@@ -3,9 +3,8 @@
 Guidelines for agents editing documentation under `docs/`. This directory contains comprehensive technical and operational documentation. **Always consult `../CLAUDE.md` first** – it serves as the primary context map and references the most critical docs below.
 
 ## Current Status
-- **Phase 2 is DEPLOYED** and fully operational
-- Documentation reflects production system with 4-state debounced presence detection
-- Phase 3 (automated calibration) is planned but not yet implemented
+- **Phase 3 is DEPLOYED** and fully operational
+- Documentation reflects production system with 4-state debounced presence detection, distance windowing, and MAD calibration services
 
 ## Document Topology
 
@@ -39,11 +38,12 @@ docs/
    - **Baseline**: μ_still = 6.7%, σ_still = 3.5% (calibrated 2025-11-06)
    - **Thresholds**: k_on = 9.0, k_off = 4.0
    - **Debounce timers**: on = 3s, off = 5s, absolute_clear = 30s
-   - **Phase 2 is DEPLOYED** (not "planned" or "ready for deployment")
+   - **Distance window**: d_min = 0 cm, d_max = 600 cm (tunable)
+   - **Phase 3 is DEPLOYED** (document calibration + distance window behavior)
 2. **Phase markers** – clearly distinguish:
    - ✅ Phase 1 (Z-score detection) – COMPLETE
    - ✅ Phase 2 (State machine + debouncing) – DEPLOYED
-   - ⏳ Phase 3 (Automated calibration) – PLANNED (services exist but only log messages)
+   - ✅ Phase 3 (Automated calibration + hardening) – DEPLOYED (wizard UI still pending)
 3. **Audience clarity**:
    - Engineering specs (ARCHITECTURE.md, presence-engine-spec.md) assume C++/ESPHome expertise
    - Operator guides (quickstart.md, troubleshooting.md, FAQ) must be accessible to Home Assistant users
@@ -78,12 +78,12 @@ When documenting workflows:
 
 ## Review Checklist Before Commit
 - [ ] Facts match firmware + HA configuration (entity IDs, defaults, state names)
-- [ ] Phase status correct (Phase 2 DEPLOYED, Phase 3 PLANNED)
+- [ ] Phase status correct (Phase 3 DEPLOYED, wizard UI still pending)
 - [ ] Two-machine workflow clearly explained where relevant
 - [ ] Screenshots/diagrams updated if UI changed
 - [ ] Internal/external links work (use `markdown-link-check` if unsure)
 - [ ] Spelling/grammar checked (`cspell` or editor tools)
-- [ ] Phase references accurate (✅ Phase 1/2 complete, ⏳ Phase 3 planned)
+- [ ] Phase references accurate (✅ Phase 1/2/3 complete, 🎯 wizard pending)
 - [ ] Tables + lists render correctly in GitHub preview
 - [ ] Cross-references prioritize the 5 primary docs from CLAUDE.md
 

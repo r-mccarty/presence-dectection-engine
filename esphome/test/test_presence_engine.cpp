@@ -7,8 +7,10 @@
  */
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 /**
  * Simplified Phase 2 Presence Engine for Testing
@@ -32,6 +34,8 @@ public:
     unsigned long on_debounce_ms_ = 3000;
     unsigned long off_debounce_ms_ = 5000;
     unsigned long abs_clear_delay_ms_ = 30000;
+    float d_min_cm_ = 0.0f;
+    float d_max_cm_ = 600.0f;
 
     // State
     State current_state_ = IDLE;
@@ -42,6 +46,9 @@ public:
     unsigned long mock_time_ = 0;
     unsigned long debounce_start_time_ = 0;
     unsigned long last_high_confidence_time_ = 0;
+    bool calibrating_ = false;
+    unsigned long calibration_end_time_ = 0;
+    std::vector<float> calibration_samples_;
 
     // Z-score calculation: z = (x - μ) / σ
     float calculate_z_score(float energy) {
@@ -56,10 +63,76 @@ public:
         mock_time_ += ms;
     }
 
-    // Process energy reading (Phase 2 state machine logic)
-    void process_energy(float energy) {
+    static float compute_median(std::vector<float> values) {
+        if (values.empty()) {
+            return 0.0f;
+        }
+
+        size_t mid = values.size() / 2;
+        std::nth_element(values.begin(), values.begin() + mid, values.end());
+        float median = values[mid];
+
+        if (values.size() % 2 == 0) {
+            std::nth_element(values.begin(), values.begin() + mid - 1, values.end());
+            median = (median + values[mid - 1]) / 2.0f;
+        }
+        return median;
+    }
+
+    void finalize_calibration() {
+        calibrating_ = false;
+        if (calibration_samples_.empty()) {
+            return;
+        }
+
+        auto samples = calibration_samples_;
+        calibration_samples_.clear();
+
+        float median = compute_median(samples);
+        std::vector<float> deviations(samples.size());
+        for (size_t i = 0; i < samples.size(); ++i) {
+            deviations[i] = std::fabs(samples[i] - median);
+        }
+        float mad = compute_median(deviations);
+        float sigma = mad * 1.4826f;
+        if (sigma < 0.05f) {
+            sigma = 0.05f;
+        }
+
+        mu_still_ = median;
+        sigma_still_ = sigma;
+    }
+
+    void start_calibration(uint32_t duration_s) {
+        calibrating_ = true;
+        calibration_samples_.clear();
+        calibration_end_time_ = mock_time_ + duration_s * 1000UL;
+    }
+
+    void maybe_collect_calibration(float energy) {
+        if (!calibrating_) {
+            return;
+        }
+        calibration_samples_.push_back(energy);
+        if (mock_time_ >= calibration_end_time_) {
+            finalize_calibration();
+        }
+    }
+
+    // Process energy reading (Phase 3 logic: distance window + calibration + state machine)
+    void process_energy(float energy, bool distance_allowed = true) {
+        if (calibrating_ && mock_time_ >= calibration_end_time_) {
+            finalize_calibration();
+        }
+
+        if (!distance_allowed) {
+            return;
+        }
+
         float z_still = calculate_z_score(energy);
         unsigned long now = mock_time_;
+
+        maybe_collect_calibration(energy);
 
         switch (current_state_) {
             case IDLE:
@@ -348,6 +421,40 @@ TEST_F(PresenceEngineTest, HandlesVeryLargeEnergyValues) {
     engine_.advance_time(5000);  // off_debounce
     engine_.process_energy(0.0f);
     EXPECT_EQ(engine_.current_state_, SimplePresenceEngine::IDLE);
+}
+
+TEST_F(PresenceEngineTest, DistanceWindowBlocksFrames) {
+    engine_.d_min_cm_ = 50.0f;
+    engine_.d_max_cm_ = 200.0f;
+
+    // High energy but frame rejected -> remains IDLE
+    engine_.process_energy(185.0f, false);
+    EXPECT_EQ(engine_.current_state_, SimplePresenceEngine::IDLE);
+
+    // Allow frame -> should debounce as normal
+    engine_.process_energy(185.0f, true);
+    engine_.advance_time(3000);
+    engine_.process_energy(185.0f, true);
+    EXPECT_EQ(engine_.current_state_, SimplePresenceEngine::PRESENT);
+}
+
+TEST_F(PresenceEngineTest, CalibrationComputesMedianAndMad) {
+    engine_.start_calibration(2);  // 2 seconds
+
+    engine_.process_energy(120.0f);  // Sample 1
+    engine_.process_energy(110.0f);  // Sample 2
+    engine_.advance_time(1000);
+    engine_.process_energy(130.0f);  // Sample 3
+    engine_.process_energy(800.0f);  // Outlier
+
+    // Advance time to finish calibration
+    engine_.advance_time(2000);
+    engine_.process_energy(100.0f);  // Trigger finalize
+
+    // Median of [120,110,130,800] = (120+130)/2 = 125
+    EXPECT_FLOAT_EQ(engine_.mu_still_, 125.0f);
+    // MAD: values -> [5,15,5,675] median = (5+15)/2 = 10 -> sigma ≈ 10 * 1.4826
+    EXPECT_NEAR(engine_.sigma_still_, 14.826f, 0.01f);
 }
 
 int main(int argc, char **argv) {

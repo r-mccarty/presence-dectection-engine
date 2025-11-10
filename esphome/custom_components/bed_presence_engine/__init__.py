@@ -1,10 +1,10 @@
 """
-Bed Presence Engine Custom Component for ESPHome - Phase 1
+Bed Presence Engine Custom Component for ESPHome
 
-This component implements z-score based presence detection:
-- Statistical normalization (z-score calculation)
-- Simple threshold comparison with hysteresis
-- No debouncing or temporal filtering (Phase 1)
+Implements the full three-phase presence engine:
+- Z-score calculation with runtime thresholds
+- 4-state debounced state machine
+- Phase 3 distance windowing + MAD-based calibration services
 """
 import esphome.codegen as cg
 from esphome.components import binary_sensor

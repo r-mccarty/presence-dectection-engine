@@ -96,12 +96,17 @@ async def test_calibration_service_exists(ha_client):
     # Check that our custom ESPHome services exist
     esphome_services = services.get("esphome", {})
 
-    assert "bed_presence_detector_start_calibration" in esphome_services, \
-        "start_calibration service not found"
-    assert "bed_presence_detector_stop_calibration" in esphome_services, \
-        "stop_calibration service not found"
-    assert "bed_presence_detector_reset_to_defaults" in esphome_services, \
-        "reset_to_defaults service not found"
+    required = [
+        "bed_presence_detector_start_calibration",
+        "bed_presence_detector_calibrate_start_baseline",
+        "bed_presence_detector_stop_calibration",
+        "bed_presence_detector_calibrate_stop",
+        "bed_presence_detector_reset_to_defaults",
+        "bed_presence_detector_calibrate_reset_all",
+    ]
+
+    for service_name in required:
+        assert service_name in esphome_services, f"{service_name} service not found"
 
 
 @pytest.mark.asyncio
@@ -116,12 +121,22 @@ async def test_reset_to_defaults(ha_client):
     # Wait for reset to complete
     await asyncio.sleep(2)
 
-    # Verify defaults are restored (Phase 1 defaults: k_on=4.0, k_off=2.0)
+    # Verify defaults are restored (Phase 3 defaults)
     k_on_state = await ha_client.get_state("number.bed_presence_detector_k_on_on_threshold_multiplier")
     k_off_state = await ha_client.get_state("number.bed_presence_detector_k_off_off_threshold_multiplier")
+    on_debounce = await ha_client.get_state("number.bed_presence_detector_on_debounce_ms")
+    off_debounce = await ha_client.get_state("number.bed_presence_detector_off_debounce_ms")
+    abs_clear = await ha_client.get_state("number.bed_presence_detector_absolute_clear_delay_ms")
+    d_min = await ha_client.get_state("number.bed_presence_detector_distance_min_cm")
+    d_max = await ha_client.get_state("number.bed_presence_detector_distance_max_cm")
 
-    assert float(k_on_state["state"]) == 4.0, "k_on threshold not reset to default (4.0)"
-    assert float(k_off_state["state"]) == 2.0, "k_off threshold not reset to default (2.0)"
+    assert float(k_on_state["state"]) == 9.0, "k_on threshold not reset to default (9.0)"
+    assert float(k_off_state["state"]) == 4.0, "k_off threshold not reset to default (4.0)"
+    assert float(on_debounce["state"]) == 3000, "on_debounce_ms not reset"
+    assert float(off_debounce["state"]) == 5000, "off_debounce_ms not reset"
+    assert float(abs_clear["state"]) == 30000, "abs_clear_delay_ms not reset"
+    assert float(d_min["state"]) == 0.0, "distance_min not reset"
+    assert float(d_max["state"]) == 600.0, "distance_max not reset"
 
 
 @pytest.mark.asyncio
@@ -132,7 +147,15 @@ async def test_state_reason_sensor(ha_client):
     assert len(state["state"]) > 0, "State reason is empty"
 
 
-@pytest.mark.skip(reason="Phase 3 feature: Calibration helper entities not yet implemented")
+@pytest.mark.asyncio
+async def test_change_reason_sensor(ha_client):
+    """Test that the change reason text sensor is available and updating"""
+    state = await ha_client.get_state("sensor.bed_presence_detector_presence_change_reason")
+    assert state is not None, "Change reason sensor not found"
+    assert len(state["state"]) > 0, "Change reason is empty"
+
+
+@pytest.mark.skip(reason="Calibration wizard helpers not yet implemented")
 @pytest.mark.asyncio
 async def test_calibration_helpers_exist(ha_client):
     """Test that the calibration helper entities exist in Home Assistant"""
@@ -143,7 +166,7 @@ async def test_calibration_helpers_exist(ha_client):
     assert calibration_in_progress is not None, "Calibration in_progress input_boolean not found"
 
 
-@pytest.mark.skip(reason="Phase 3 feature: Calibration scripts not yet implemented")
+@pytest.mark.skip(reason="Calibration wizard scripts not yet implemented")
 @pytest.mark.asyncio
 async def test_full_calibration_flow(ha_client):
     """
@@ -177,20 +200,26 @@ async def test_full_calibration_flow(ha_client):
 
 
 @pytest.mark.asyncio
-async def test_phase2_debounce_entities_exist(ha_client):
-    """Test that Phase 2 debounce timer entities exist"""
+async def test_phase3_configuration_entities_exist(ha_client):
+    """Test that Phase 3 configuration entities exist"""
     on_debounce = await ha_client.get_state("number.bed_presence_detector_on_debounce_ms")
     off_debounce = await ha_client.get_state("number.bed_presence_detector_off_debounce_ms")
-    abs_clear = await ha_client.get_state("number.bed_presence_detector_abs_clear_delay_ms")
+    abs_clear = await ha_client.get_state("number.bed_presence_detector_absolute_clear_delay_ms")
+    d_min = await ha_client.get_state("number.bed_presence_detector_distance_min_cm")
+    d_max = await ha_client.get_state("number.bed_presence_detector_distance_max_cm")
 
     assert on_debounce is not None, "number.bed_presence_detector_on_debounce_ms not found"
     assert off_debounce is not None, "number.bed_presence_detector_off_debounce_ms not found"
-    assert abs_clear is not None, "number.bed_presence_detector_abs_clear_delay_ms not found"
+    assert abs_clear is not None, "number.bed_presence_detector_absolute_clear_delay_ms not found"
+    assert d_min is not None, "number.bed_presence_detector_distance_min_cm not found"
+    assert d_max is not None, "number.bed_presence_detector_distance_max_cm not found"
 
     # Verify values are reasonable
     assert float(on_debounce["state"]) >= 0, "on_debounce_ms should be non-negative"
     assert float(off_debounce["state"]) >= 0, "off_debounce_ms should be non-negative"
     assert float(abs_clear["state"]) >= 0, "abs_clear_delay_ms should be non-negative"
+    assert 0.0 <= float(d_min["state"]) <= 600.0, "distance_min_cm should be within 0-600"
+    assert 0.0 <= float(d_max["state"]) <= 600.0, "distance_max_cm should be within 0-600"
 
 
 @pytest.mark.asyncio
@@ -210,6 +239,30 @@ async def test_phase2_update_debounce_timers(ha_client):
     # Verify the update
     state = await ha_client.get_state("number.bed_presence_detector_on_debounce_ms")
     assert float(state["state"]) == 5000, "on_debounce_ms was not updated"
+
+
+@pytest.mark.asyncio
+async def test_phase3_update_distance_window(ha_client):
+    """Test that we can update the distance window entities"""
+    await ha_client.call_service(
+        "number",
+        "set_value",
+        entity_id="number.bed_presence_detector_distance_min_cm",
+        value=100
+    )
+    await asyncio.sleep(1)
+    await ha_client.call_service(
+        "number",
+        "set_value",
+        entity_id="number.bed_presence_detector_distance_max_cm",
+        value=300
+    )
+    await asyncio.sleep(1)
+
+    d_min = await ha_client.get_state("number.bed_presence_detector_distance_min_cm")
+    d_max = await ha_client.get_state("number.bed_presence_detector_distance_max_cm")
+    assert float(d_min["state"]) == 100.0, "distance_min_cm was not updated"
+    assert float(d_max["state"]) == 300.0, "distance_max_cm was not updated"
 
 
 @pytest.mark.asyncio

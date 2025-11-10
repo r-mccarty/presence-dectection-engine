@@ -4,9 +4,9 @@
 
 ## Project Snapshot
 - **Domain**: ESP32-based bed presence detection system using LD2410 mmWave sensor and ESPHome firmware.
-- **Current phase**: **Phase 2 is DEPLOYED** and fully operational. Phase 1 is complete, Phase 3 (automated calibration) is planned.
+- **Current phase**: **Phase 3 is DEPLOYED** and fully operational. Phase 1 and Phase 2 are complete.
 - **Core behavior**: Z-score statistical analysis of `ld2410_still_energy` with a 4-state debounced state machine (`IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF`). All thresholds and debounce timers are runtime-tunable from Home Assistant.
-- **Baselines**: μ_still = 6.7%, σ_still = 3.5% (calibrated 2025-11-06, empty bed). Defaults: k_on = 9.0, k_off = 4.0, on_debounce = 3s, off_debounce = 5s, absolute_clear = 30s.
+- **Baselines**: μ_still = 6.7%, σ_still = 3.5% (calibrated 2025-11-06, empty bed). Defaults: k_on = 9.0, k_off = 4.0, on_debounce = 3s, off_debounce = 5s, absolute_clear = 30s, d_min = 0 cm, d_max = 600 cm.
 - **Development Environment**: Two-machine workflow: GitHub Codespaces for code editing, ubuntu-node for firmware flashing and hardware access.
 - **Languages**: C++ (custom component), YAML (ESPHome + HA), Python (tests + scripts), Markdown (docs).
 

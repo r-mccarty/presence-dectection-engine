@@ -195,6 +195,10 @@ PRESENT (z=12.34, high_conf_age=5000ms, abs_clear_ready=no)
 - State transitions: Should see DEBOUNCING_ON → PRESENT after 3 seconds
 - Clearing: Should see DEBOUNCING_OFF → IDLE after 5 seconds + 30 second absolute delay
 
+For a one-line summary of why the last transition occurred, also watch
+`sensor.bed_presence_detector_presence_change_reason` (values like `on:threshold_exceeded`,
+`off:abs_clear_delay`, `calibration:completed`).
+
 ### ESPHome Logs
 
 View real-time logs from the device:
@@ -218,7 +222,7 @@ esphome logs bed-presence-detector.yaml
 
 **Services Tool** (Developer Tools → Services):
 - Test adjusting thresholds without dashboard
-- Call calibration services (placeholder in Phase 2, implemented in Phase 3)
+- Trigger calibration/reset services (`...calibrate_start_baseline`, `...calibrate_stop`, `...calibrate_reset_all`)
 
 ### Web Server
 
@@ -253,31 +257,36 @@ To verify threshold behavior:
 3. Confirm signal is sustained above/below threshold for full debounce duration
 4. For clearing issues: Check `high_conf_age` exceeds `abs_clear_delay_ms` (30000ms default)
 
-### Phase 3 (Planned): Automated Calibration
+### Phase 3 (Current): Automated Calibration
 
-**Not yet implemented**. Current calibration is manual using Python scripts on ubuntu-node.
+**Features live in production firmware:**
+- `esphome.bed_presence_detector_calibrate_start_baseline` collects still-energy samples (duration_s > 0) within the configured distance window.
+- MAD statistics derive μ/σ; results are applied immediately and annotated via `Presence State Reason`.
+- `Presence Change Reason` reports `calibration:started`, `calibration:completed`, or `calibration:insufficient_samples`.
+- `esphome.bed_presence_detector_calibrate_reset_all` restores known-good defaults across all number entities.
 
-Services like `esphome.bed_presence_detector_start_calibration` exist but are placeholders.
+**Troubleshooting tips:**
+1. **"Insufficient samples"** – Increase `duration_s` or widen the distance window temporarily so the sensor sees the bed area.
+2. **"Duration must be > 0" error** – Developer Tools → Services requires an integer > 0. Recommended: 60–120 seconds.
+3. **Unexpected μ/σ values** – Ensure the bed is empty and there is no major movement within the detection zone during sampling.
+4. **Distance window confusion** – If every frame is filtered out, temporarily set `distance_min_cm=0` and `distance_max_cm=600`, calibrate, then tighten the window again.
 
 ## Known Issues and Limitations
 
-### Placeholder Calibration Services
+### Calibration Wizard UI (Pending)
 
-**Status:** Phase 2 current, Phase 3 planned
+**Status:** Phase 3 firmware is deployed; Home Assistant dashboard wizard still pending.
 
-**Issue:** Calibration services exist in ESPHome but only log messages. They do not perform actual calibration.
+**Issue:** Operators must call ESPHome services manually (Developer Tools or automations). There is no guided UI yet.
 
-**Services affected:**
-- `esphome.bed_presence_detector_start_calibration` - Logs "Starting calibration..." but doesn't collect data
-- `esphome.bed_presence_detector_stop_calibration` - Logs "Stopping calibration..." but doesn't calculate statistics
-- `esphome.bed_presence_detector_reset_to_defaults` - Functional (resets thresholds to defaults)
+**Impact:** Users need to manually track calibration steps/timers, which can lead to inconsistent procedures.
 
-**Workaround:** Use manual calibration process:
-1. Run `collect_baseline.py` on ubuntu-node to collect data
-2. Update `bed_presence.h` with calculated μ and σ values
-3. Recompile and flash firmware
+**Workaround:**
+1. Use Developer Tools → Services with saved presets (e.g., 60 seconds) or set up a simple HA script.
+2. Monitor ESPHome logs/text sensors for progress until the wizard ships.
+3. Document the timestamp + μ/σ values after each calibration for traceability.
 
-**Planned fix:** Phase 3 will implement full calibration service functionality with MAD-based statistical analysis.
+**Planned fix:** Build a Lovelace dashboard + helper entities to orchestrate vacant/occupied sampling and display progress.
 
 ---
 
@@ -341,12 +350,12 @@ ssh ubuntu-node "cd ~/bed-presence-sensor && python3 scripts/collect_baseline.py
 
 **Status:**
 - ✅ Test framework functional
-- ✅ Phase 1 and Phase 2 entity tests working
-- ⚠️ Phase 3 calibration service tests skipped (services not implemented)
+- ✅ Phase 1/2/3 entity + service tests working
+- ⚠️ Calibration wizard helper tests skipped (UI still pending)
 
-**Impact:** Integration tests don't fully validate Phase 3 features (which are planned, not implemented).
+**Impact:** Automated coverage does not exercise the future HA wizard. Device-side calibration remains fully tested.
 
-**Workaround:** Manual testing for calibration services until Phase 3 implementation.
+**Workaround:** Continue using Developer Tools → Services or scripts until the wizard arrives.
 
 ---
 

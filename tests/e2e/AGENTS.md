@@ -23,23 +23,23 @@ pip install -r requirements.txt
 # Verify .env.local exists with HA credentials
 cat ~/.env.local  # Should contain HA_URL and HA_TOKEN
 
-# Run full test suite (Phase 3 tests auto-skipped)
+# Run full test suite (wizard helpers auto-skipped)
 pytest -v
 
 # Run specific test categories
 pytest -v -k "debounce"    # Debounce timer tests
 pytest -v -k "threshold"   # Threshold configuration tests
-pytest -v -k "calibration" # Calibration tests (currently skipped)
+pytest -v -k "calibration" # Calibration tests
 ```
 
-## Current Scope (Phase 2)
+## Current Scope (Phase 3)
 - ✅ **Device connectivity**: Verify ESPHome device is online and responsive
 - ✅ **Binary sensor availability**: Check `binary_sensor.bed_presence_detector_bed_occupied` exists
 - ✅ **Runtime threshold controls**: Test k_on/k_off number entities update correctly
 - ✅ **Debounce timer controls**: Test on/off/absolute-clear debounce timers (Phase 2 addition)
-- ✅ **State reason telemetry**: Verify `text_sensor` provides z-score diagnostics
-- ✅ **ESPHome services**: Test service calls (reset_to_defaults, start/stop_calibration stubs)
-- ⏸️ **Calibration helpers**: Skipped until Phase 3 implementation (services only log messages)
+- ✅ **State/change reason telemetry**: Verify text sensors provide z-score diagnostics + reason codes
+- ✅ **ESPHome services**: Test Phase 3 calibration + reset services end-to-end
+- ⏸️ **Calibration helpers**: HA dashboard wizard still pending (scripts remain commented)
 
 ## Environment Requirements
 
@@ -49,7 +49,7 @@ pytest -v -k "calibration" # Calibration tests (currently skipped)
 - **Device**: ESPHome device "bed-presence-detector" provisioned and online
 - **Network**: ubuntu-node must be able to reach HA at 192.168.0.148
 
-### Required Entity IDs (Phase 2 Firmware)
+### Required Entity IDs (Phase 3 Firmware)
 
 **Binary Sensor:**
 - `binary_sensor.bed_presence_detector_bed_occupied` (debounced presence state)
@@ -57,18 +57,24 @@ pytest -v -k "calibration" # Calibration tests (currently skipped)
 **Configuration Controls:**
 - `number.bed_presence_detector_k_on_on_threshold_multiplier` (default: 9.0)
 - `number.bed_presence_detector_k_off_off_threshold_multiplier` (default: 4.0)
-- `number.bed_presence_detector_on_debounce_timer_ms` (default: 3000)
-- `number.bed_presence_detector_off_debounce_timer_ms` (default: 5000)
+- `number.bed_presence_detector_on_debounce_ms` (default: 3000)
+- `number.bed_presence_detector_off_debounce_ms` (default: 5000)
 - `number.bed_presence_detector_absolute_clear_delay_ms` (default: 30000)
+- `number.bed_presence_detector_distance_min_cm` (default: 0)
+- `number.bed_presence_detector_distance_max_cm` (default: 600)
 
 **Diagnostic Sensors:**
 - `text_sensor.bed_presence_detector_presence_state_reason` (z-score + state machine info)
+- `text_sensor.bed_presence_detector_presence_change_reason` (last change reason)
 - `sensor.bed_presence_detector_ld2410_still_energy` (raw sensor data)
 
 **ESPHome Services:**
-- `esphome.bed_presence_detector_start_calibration` (Phase 3 stub, only logs)
-- `esphome.bed_presence_detector_stop_calibration` (Phase 3 stub, only logs)
-- `esphome.bed_presence_detector_reset_to_defaults` (functional)
+- `esphome.bed_presence_detector_start_calibration`
+- `esphome.bed_presence_detector_calibrate_start_baseline`
+- `esphome.bed_presence_detector_stop_calibration`
+- `esphome.bed_presence_detector_calibrate_stop`
+- `esphome.bed_presence_detector_reset_to_defaults`
+- `esphome.bed_presence_detector_calibrate_reset_all`
 
 ### Credentials Configuration
 
@@ -90,7 +96,7 @@ HA_TOKEN=your_long_lived_access_token_here
   - k_on = 9.0, k_off = 4.0
   - on_debounce = 3000ms, off_debounce = 5000ms, absolute_clear = 30000ms
   - Baseline: μ = 6.7%, σ = 3.5%
-- **Phase markers**: Tag Phase 3 tests with `@pytest.mark.skip(reason="Phase 3 not implemented")`
+- **Wizard helpers**: Only skip tests that rely on future HA dashboard wizard (still planned)
 - **Test isolation**: Use fixtures to reset thresholds/timers between tests
 - **Entity IDs**: Match exactly with `esphome/packages/presence_engine.yaml`
 - **Documentation sync**: When adding new tests, update this file and `docs/ARCHITECTURE.md`
@@ -141,7 +147,7 @@ When firmware behavior changes:
 - **"Entity not found"**:
   - Confirm ESPHome device online in HA UI
   - Check entity IDs match `esphome/packages/presence_engine.yaml`
-  - Verify firmware has been flashed with Phase 2 code
+  - Verify firmware has been flashed with latest Phase 3 code
   - Look for typos in entity ID strings (common: underscores vs hyphens)
 - **"Entity state unexpected"**:
   - Check ESPHome device logs: `esphome logs bed-presence-detector.yaml`
@@ -152,7 +158,7 @@ When firmware behavior changes:
 - **"Service call failed"**:
   - Check ESPHome logs for error messages
   - Verify service names match `packages/services_calibration.yaml`
-  - Remember: Phase 3 services (start/stop_calibration) only log messages
+  - Ensure calibration duration > 0 seconds when invoking start service
 - **"Timeout waiting for service response"**:
   - Increase timeout in test
   - Check device isn't busy processing previous request
@@ -161,6 +167,6 @@ When firmware behavior changes:
 ### Test Failures
 - **Flaky tests**: Increase debounce timers or polling intervals
 - **Defaults mismatch**: Check firmware was compiled with latest thresholds
-- **Phase 3 tests running**: Ensure `@pytest.mark.skip` decorator present
+- **HA wizard tests running**: Keep `@pytest.mark.skip` on tests tied to the future dashboard helpers
 
 For broader context, see `../../AGENTS.md`. For firmware issues, see `../../esphome/AGENTS.md`.

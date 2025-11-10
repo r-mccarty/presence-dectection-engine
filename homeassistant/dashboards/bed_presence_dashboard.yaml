@@ -11,11 +11,13 @@ views:
       - type: entities
         title: Current Status
         entities:
-          - entity: binary_sensor.bed_occupied
+          - entity: binary_sensor.bed_presence_detector_bed_occupied
             name: Bed Occupied
-          - entity: sensor.presence_state_reason
+          - entity: sensor.bed_presence_detector_presence_state_reason
             name: Last State Change Reason
-          - entity: sensor.ld2410_still_energy
+          - entity: sensor.bed_presence_detector_presence_change_reason
+            name: Change Reason Code
+          - entity: sensor.bed_presence_detector_ld2410_still_energy
             name: Current Energy Level
 
       # Live Energy Chart
@@ -24,9 +26,9 @@ views:
         hours_to_show: 1
         refresh_interval: 0
         entities:
-          - entity: sensor.ld2410_still_energy
+          - entity: sensor.bed_presence_detector_ld2410_still_energy
             name: Still Energy
-          - entity: sensor.ld2410_moving_energy
+          - entity: sensor.bed_presence_detector_ld2410_moving_energy
             name: Moving Energy
 
       # Threshold Visualization
@@ -36,15 +38,15 @@ views:
           show: true
         graph_span: 5min
         series:
-          - entity: sensor.ld2410_still_energy
+          - entity: sensor.bed_presence_detector_ld2410_still_energy
             name: Still Energy
             stroke_width: 2
-          - entity: number.k_on_on_threshold_multiplier
+          - entity: number.bed_presence_detector_k_on_on_threshold_multiplier
             name: k_on (ON Threshold)
             type: line
             stroke_width: 1
             curve: stepline
-          - entity: number.k_off_off_threshold_multiplier
+          - entity: number.bed_presence_detector_k_off_off_threshold_multiplier
             name: k_off (OFF Threshold)
             type: line
             stroke_width: 1
@@ -58,28 +60,55 @@ views:
       - type: entities
         title: Threshold Settings
         entities:
-          - entity: number.k_on_on_threshold_multiplier
+          - entity: number.bed_presence_detector_k_on_on_threshold_multiplier
             name: k_on (ON Threshold Multiplier)
-          - entity: number.k_off_off_threshold_multiplier
+          - entity: number.bed_presence_detector_k_off_off_threshold_multiplier
             name: k_off (OFF Threshold Multiplier)
 
       # Phase 2: Debounce Timer Configuration
       - type: entities
         title: Debounce Timers
         entities:
-          - entity: number.on_debounce_timer_ms
+          - entity: number.bed_presence_detector_on_debounce_ms
             name: On Debounce (ms)
-          - entity: number.off_debounce_timer_ms
+          - entity: number.bed_presence_detector_off_debounce_ms
             name: Off Debounce (ms)
-          - entity: number.absolute_clear_delay_ms
+          - entity: number.bed_presence_detector_absolute_clear_delay_ms
             name: Absolute Clear Delay (ms)
+
+      - type: entities
+        title: Distance Window
+        entities:
+          - entity: number.bed_presence_detector_distance_min_cm
+            name: Distance Min (cm)
+          - entity: number.bed_presence_detector_distance_max_cm
+            name: Distance Max (cm)
 
       # Quick Actions
       - type: button
         name: Reset to Factory Defaults
         tap_action:
           action: call-service
-          service: esphome.bed_presence_detector_reset_to_defaults
+          service: esphome.bed_presence_detector_calibrate_reset_all
+
+      - type: grid
+        title: Calibration Actions
+        columns: 2
+        cards:
+          - type: button
+            name: Start Baseline (60s)
+            icon: mdi:chart-bell-curve-cumulative
+            tap_action:
+              action: call-service
+              service: esphome.bed_presence_detector_calibrate_start_baseline
+              data:
+                duration_s: 60
+          - type: button
+            name: Stop Calibration
+            icon: mdi:stop
+            tap_action:
+              action: call-service
+              service: esphome.bed_presence_detector_calibrate_stop
 
   # NOTE: Calibration Wizard view commented out - requires helper entities not yet defined
   # Uncomment when input_select.calibration_step, input_number.calibration_vacant_max,
@@ -132,24 +161,24 @@ views:
       - type: entities
         title: Device Information
         entities:
-          - entity: sensor.wifi_signal
+          - entity: sensor.bed_presence_detector_wifi_signal
             name: Wi-Fi Signal
-          - entity: sensor.uptime
+          - entity: sensor.bed_presence_detector_uptime
             name: Uptime
-          - entity: sensor.ip_address
+          - entity: sensor.bed_presence_detector_ip_address
             name: IP Address
-          - entity: sensor.esphome_version
+          - entity: sensor.bed_presence_detector_esphome_version
             name: ESPHome Version
 
       # Raw LD2410 Data
       - type: entities
         title: LD2410 Raw Data
         entities:
-          - entity: binary_sensor.ld2410_presence
+          - entity: binary_sensor.bed_presence_detector_ld2410_presence
             name: Raw Presence
-          - entity: binary_sensor.ld2410_moving_target
+          - entity: binary_sensor.bed_presence_detector_ld2410_moving_target
             name: Moving Target
-          - entity: binary_sensor.ld2410_still_target
+          - entity: binary_sensor.bed_presence_detector_ld2410_still_target
             name: Still Target
-          - entity: sensor.ld2410_detection_distance
+          - entity: sensor.bed_presence_detector_ld2410_detection_distance
             name: Detection Distance
