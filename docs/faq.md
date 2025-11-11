@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-**Current Status**: Phase 2 (State Machine + Debouncing) - Deployed and operational
+**Current Status**: Phase 3 (Automated Calibration & Hardening) - Deployed and operational | Phase 3.1+ (Advanced Features) - In planning
 
 ## General Questions
 
@@ -43,17 +43,24 @@ Yes, the sensor detects presence regardless of bed position. However, significan
 
 ### How accurate is the detection?
 
-**Phase 2 accuracy** (current deployment):
-- **False positive rate**: Low (<1% with proper calibration and debounce timers)
+**Phase 3 accuracy** (current deployment):
+- **False positive rate**: Very low (<0.5% with automated MAD calibration and distance windowing)
 - **False negative rate**: Very low when moving, moderate when lying very still (tunable with `abs_clear_delay_ms`)
 - **Response time**: 3-5 seconds (configurable debounce timers)
 - **Detection confidence**: High when person is moving, moderate when completely still
+- **Environmental robustness**: Excellent with distance windowing to exclude interference zones
+
+**Phase 3 improvements over Phase 2**:
+- Automated MAD-based calibration eliminates outlier sensitivity
+- Distance windowing (d_min/d_max) filters out fan zones and other interference sources
+- Change reason telemetry helps identify and resolve edge cases
+- Runtime reset service provides quick recovery from misconfigurations
 
 **Factors affecting accuracy**:
 - Sensor positioning and mounting
-- Baseline calibration quality
-- Environmental interference (fans, HVAC, pets)
-- Threshold and timer tuning
+- Baseline calibration quality (automated in Phase 3)
+- Environmental interference (mitigated via distance windowing)
+- Threshold and timer tuning (all runtime configurable)
 
 ## Technical Questions
 
@@ -81,9 +88,14 @@ Yes, the sensor detects presence regardless of bed position. However, significan
 - Still energy provides a more stable signal for temporal filtering
 
 **When to use moving energy**:
-- Detecting restlessness or sleep quality (future feature)
+- Detecting restlessness or sleep quality (**Phase 3.1+ opportunity**)
 - Distinguishing between sleeping and active states
-- Detecting movement patterns (not implemented in Phase 1/2)
+- Detecting movement patterns (not implemented in Phases 1-3)
+
+**Phase 3.1+ exploration**: Optional moving-energy fusion could provide:
+- Restlessness metrics for sleep quality tracking
+- Enhanced confidence during state transitions
+- Multi-modal presence detection combining both energy types
 
 ### What's the purpose of the debounce timers?
 
@@ -173,7 +185,7 @@ binary_sensor:
 
 **Wider gap** (higher k_on - lower k_off) = more stable but requires stronger signal differentiation.
 
-### What's the difference between Phase 1, 2, and 3?
+### What's the difference between Phase 1, 2, 3, and 3.1+?
 
 **Phase 1** ✅ Complete:
 - Basic z-score detection
@@ -182,19 +194,27 @@ binary_sensor:
 - Runtime tunable thresholds
 - **Status**: Completed 2025-11-06
 
-**Phase 2** ✅ Deployed (Current):
+**Phase 2** ✅ Deployed:
 - 4-state machine (IDLE, DEBOUNCING_ON, PRESENT, DEBOUNCING_OFF)
 - Temporal filtering with 3 debounce timers
 - Absolute clear delay for handling stillness
 - Runtime tunable thresholds AND timers
 - **Status**: Deployed to hardware 2025-11-07
 
-**Phase 3** ✅ Deployed:
+**Phase 3** ✅ Deployed (Current Production):
 - Automated baseline calibration via ESPHome services (MAD statistics)
-- Distance windowing to ignore zones and noisy areas
-- Presence change reason telemetry + reset services
-- Guided Home Assistant calibration wizard with helper entities + scripts
-- **Status**: Deployed 2025-11-08 (wizard shipped 2025-11-10)
+- Distance windowing (d_min/d_max) to ignore interference zones
+- Presence change reason telemetry for debugging
+- Runtime reset service for quick recovery from misconfigurations
+- Guided Home Assistant calibration wizard with helper entities
+- **Status**: Deployed 2025-11-08, wizard shipped 2025-11-10, E2E tests (16) passing 2025-11-11
+
+**Phase 3.1+** 🎯 Future Opportunities:
+- **Data persistence**: Store calibration history snapshots for auditing and rollback
+- **Advanced analytics**: Moving-energy fusion for restlessness metrics and sleep quality
+- **Operational monitoring**: Alerts for calibration drift, sensor offline events
+- **Multi-target filtering**: Enhanced detection for shared beds
+- **Status**: Planning phase, prioritization based on user feedback
 
 ## Calibration Questions
 
@@ -202,19 +222,29 @@ binary_sensor:
 
 **Baseline calibration** measures the sensor's readings when the bed is empty to establish statistical baselines (μ and σ).
 
-**Process**:
+**Phase 3 Automated Process** (Recommended):
 1. Ensure bed is completely vacant
-2. Call `esphome.bed_presence_detector_calibrate_start_baseline` (duration_s ≥ 60) or run the legacy script
-3. MAD logic calculates μ (median) and σ (MAD × 1.4826)
-4. Results are applied immediately; optional `calibrate_reset_all` restores defaults
+2. Call `esphome.bed_presence_detector_calibrate_start_baseline` (duration_s ≥ 60 recommended)
+3. **MAD-based statistics** calculate robust μ (median) and σ (MAD × 1.4826) - resistant to outliers
+4. Results are applied immediately and persist across reboots
+5. Optional `calibrate_reset_all` service restores all parameters to known-good defaults
 
 **Why needed**:
 - Different sensors have different characteristics
 - Environmental conditions vary (room size, materials, interference)
 - Sensor position affects readings
+- Temperature and humidity can cause sensor drift over time
 
-**Current method**: ESPHome service (`calibrate_start_baseline`) is recommended
-**Legacy option**: Python script (`scripts/collect_baseline.py`) for raw data exports
+**Calibration Methods**:
+- **Primary**: ESPHome service (`calibrate_start_baseline`) - automated, MAD-robust, no manual code changes
+- **UI Wizard**: Home Assistant Calibration Wizard (guided workflow with confirmations and status tracking)
+- **Legacy**: Python script (`scripts/collect_baseline.py`) for raw data exports and manual analysis
+
+**Phase 3 Advantages**:
+- No firmware recompilation required
+- MAD statistics ignore transient spikes during calibration
+- Immediate feedback via `sensor.presence_change_reason`
+- One-click reset to factory defaults if needed
 
 ### How often should I recalibrate?
 
@@ -224,13 +254,17 @@ binary_sensor:
 - Changing bed/mattress
 - Persistent false positives or negatives
 - After firmware updates that change baseline values
+- Seasonal environmental changes (temperature, humidity shifts)
 
 **Not needed**:
 - Normal daily operation (baseline persists across reboots)
 - Adjusting threshold or timer values (runtime tunable)
 - Minor environmental changes (system adapts via thresholds)
+- After adjusting distance windowing (d_min/d_max)
 
-**Typical frequency**: Once during initial setup, then rarely (every few months or when issues arise).
+**Typical frequency**: Once during initial setup, then rarely (every 3-6 months or when issues arise)
+
+**Phase 3 makes recalibration easy**: No code changes or firmware reflashing required - just call the service or use the wizard!
 
 ### Can I calibrate automatically from Home Assistant?
 
@@ -242,6 +276,52 @@ samples, computes μ/σ via MAD, and updates runtime values on the fly. `Presenc
 `homeassistant/configuration_helpers.yaml`. It wraps the same ESPHome services with confirmations, timers, and
 status tracking.
 
+### What is "distance windowing" and when should I use it?
+
+**Distance windowing** (Phase 3 feature) filters sensor readings by distance, ignoring readings outside your configured range.
+
+**Use cases**:
+- **Ceiling fans**: Set `d_max_cm = 150` to ignore fan motion at 200cm
+- **Nearby hallways**: Set `d_min_cm = 50` to ignore people walking past the door
+- **Shared walls**: Limit detection to your bed's physical location
+- **Large rooms**: Focus detection on bed area, ignore far corners
+
+**How it works**:
+- Every sensor frame reports distance to detected target
+- Frames outside `[d_min_cm, d_max_cm]` are completely ignored
+- Only in-window frames affect presence logic and calibration
+- Default: `d_min = 0cm`, `d_max = 600cm` (full LD2410 range)
+
+**Configuration**:
+1. Observe `sensor.bed_presence_detector_still_distance` in Home Assistant
+2. Note distance ranges when bed is occupied vs. interference sources
+3. Adjust `number.bed_presence_detector_distance_min/max` to exclude interference zones
+4. Changes take effect immediately (no reboot required)
+
+**Pro tip**: Use distance windowing BEFORE calibration for cleanest baseline. Calibration only samples frames within the configured window.
+
+### What are "change reasons" and how do I use them?
+
+**Change reasons** (Phase 3 feature) provide debugging context for every presence state change.
+
+**Available via**: `sensor.bed_presence_detector_presence_change_reason`
+
+**Common reason codes**:
+- `on:threshold_exceeded` - Z-score crossed k_on threshold, debounce started
+- `on:debounce_confirmed` - Sustained signal for full debounce period, now PRESENT
+- `off:threshold_dropped` - Z-score fell below k_off, off-debounce started
+- `off:debounce_confirmed` - Sustained low signal, now IDLE
+- `calibration:started` - Calibration service called, presence detection paused
+- `calibration:completed` - New baseline applied, detection resumed
+- `reset:defaults_restored` - Reset service called, all parameters restored
+
+**Use for troubleshooting**:
+- If stuck in PRESENT: Check if `off:debounce_confirmed` ever occurs
+- If false positives: Look for frequent `on:threshold_exceeded` without confirmation
+- If calibration issues: Verify `calibration:completed` appears after service calls
+
+**Phase 3.1+ opportunity**: Change reason history logging and analytics dashboard
+
 ## Development Questions
 
 ### How do I run the C++ unit tests locally?
@@ -251,15 +331,22 @@ cd esphome
 platformio test -e native
 ```
 
-**Test coverage** (16 tests, 390+ lines):
+**Test coverage** (16 C++ unit tests, 390+ lines):
 - ✅ Z-score calculation accuracy
 - ✅ State machine transitions (all 4 states)
 - ✅ Debounce timer behavior
 - ✅ Abort conditions during debouncing
 - ✅ Absolute clear delay logic
+- ✅ Distance windowing (Phase 3)
 - ✅ Edge cases (zero sigma, negative energy)
 
-**Runs in ~5 seconds** without hardware (native tests on development machine).
+**Additional E2E tests** (16 Python integration tests):
+- ✅ Calibration service flow (start/stop/reset)
+- ✅ Home Assistant entity availability and updates
+- ✅ WebSocket communication with ESPHome device
+- ✅ Wizard helper entities and automation flows
+
+**Runs in ~5 seconds** (C++ unit tests) + ~30 seconds (E2E tests on ubuntu-node)
 
 ### Can I test without hardware?
 
@@ -277,13 +364,16 @@ platformio test -e native
    esphome compile bed-presence-detector.yaml
    ```
 
-3. **E2E Tests** (requires hardware + Home Assistant):
+3. **E2E Tests** (requires hardware + Home Assistant, run on ubuntu-node):
    ```bash
-   cd tests/e2e
+   # SSH to ubuntu-node first
+   cd /home/user/bed-presence-sensor/tests/e2e
+   source ~/.venv-e2e/bin/activate
    pytest
    ```
+   Note: E2E tests must run on ubuntu-node to access Home Assistant at 192.168.0.148
 
-**Recommendation**: Run unit tests frequently during development, hardware tests before deployment.
+**Recommendation**: Run unit tests frequently during development in Codespaces, E2E tests before deployment on ubuntu-node.
 
 ### What IDE/editor should I use?
 
@@ -299,19 +389,27 @@ platformio test -e native
 
 ### How do I contribute to this project?
 
-**Contribution areas**:
-1. **Calibration wizard + persistence**: HA UI helpers, flash storage for μ/σ snapshots
-2. **Documentation**: Tutorials, wiring diagrams, troubleshooting tips
-3. **Testing**: Hardware compatibility, edge case testing
-4. **Hardware**: 3D printable mounts (current STL is placeholder)
-5. **Integration**: Additional Home Assistant blueprints, dashboards
+**Phase 3.1+ Priority Areas**:
+1. **Calibration persistence**: Flash storage for baseline history, rollback capability, audit logging
+2. **Advanced analytics**: Moving-energy fusion, restlessness scoring, sleep quality metrics
+3. **Operational monitoring**: Alerts for drift, offline sensors, or configuration issues
+4. **Documentation**: Wiring diagrams (docs/assets/wiring_diagram.png is placeholder), tutorials, video guides
+5. **Hardware**: 3D printable mounts (hardware/mounts/m5stack_side_mount.stl is placeholder)
+6. **Multi-target detection**: Enhanced algorithms for shared beds or multiple occupants
+
+**Other Contribution Areas**:
+1. **Testing**: Hardware compatibility testing with different ESP32 boards and LD2410 variants
+2. **Integration**: Additional Home Assistant blueprints, dashboards, automations
+3. **Translations**: Internationalization of UI elements and documentation
+4. **Bug fixes**: Check GitHub Issues for reported issues
 
 **Process**:
-1. Check GitHub Issues for open tasks
+1. Check GitHub Issues for open tasks or create proposal for new features
 2. Fork repository and create feature branch
 3. Follow coding standards in existing code
-4. Write unit tests for new features
-5. Update documentation
-6. Submit pull request with clear description
+4. Write unit tests for new features (C++ and/or Python E2E)
+5. Update documentation (FAQ, ARCHITECTURE.md, etc.)
+6. Test on hardware if possible (or coordinate with maintainers)
+7. Submit pull request with clear description and testing evidence
 
-**See**: Project README and CONTRIBUTING.md (if exists) for detailed guidelines.
+**See**: CONTRIBUTING.md and docs/development-scorecard.md for Phase 3.1+ roadmap details.
