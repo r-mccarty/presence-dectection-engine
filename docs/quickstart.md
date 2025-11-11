@@ -1,6 +1,6 @@
 # Quickstart Guide
 
-**Current Status**: Phase 2 (State Machine + Debouncing) - Deployed and operational
+**Current Status**: Phase 3 (Automated Calibration + Hardening) is fully deployed; Phase 3.1+ (persistence, analytics, monitoring) is now in planning.
 
 This guide will help you get your bed presence detector up and running quickly. The system uses statistical z-score analysis with a 4-state machine for reliable presence detection.
 
@@ -10,6 +10,8 @@ The bed presence detector:
 - ✅ **Detects presence** in bed using mmWave radar (no camera, preserves privacy)
 - ✅ **Filters noise** with temporal debouncing (3s on, 5s off, 30s clear delay)
 - ✅ **Self-tunes** via runtime adjustable thresholds and timers in Home Assistant
+- ✅ **Focuses on the bed zone** using a configurable distance window (0–600 cm by default)
+- ✅ **Explains its decisions** with state + change reason text sensors and calibration change logs
 - ✅ **Prevents false positives** from transient movement near bed
 - ✅ **Prevents false negatives** when lying very still
 
@@ -97,15 +99,19 @@ The device should **auto-discover** in Home Assistant:
 2. Look for "Bed Presence Detector" in discovered devices
 3. Click "Configure" and enter API encryption key (from `secrets.yaml`)
 
-**Entities created** (8 total):
+**Entities created** (Phase 3 set):
 - `binary_sensor.bed_occupied` - Main presence sensor
 - `text_sensor.presence_state_reason` - Debug info (state, z-score, timers)
+- `text_sensor.presence_change_reason` - Why the last transition or calibration event happened
 - `sensor.bed_presence_detector_ld2410_still_energy` - Raw sensor reading (%)
+- `sensor.bed_presence_detector_ld2410_still_distance` - Still-target distance (cm)
 - `number.k_on_on_threshold_multiplier` - ON threshold (default: 9.0)
 - `number.k_off_off_threshold_multiplier` - OFF threshold (default: 4.0)
 - `number.on_debounce_ms` - ON debounce timer (default: 3000ms)
 - `number.off_debounce_ms` - OFF debounce timer (default: 5000ms)
 - `number.abs_clear_delay_ms` - Absolute clear delay (default: 30000ms)
+- `number.distance_min_cm` - Lower bound for valid targets (default: 0 cm)
+- `number.distance_max_cm` - Upper bound for valid targets (default: 600 cm)
 
 ### Step 2: Deploy Dashboard (Optional)
 
@@ -156,8 +162,8 @@ Then: Settings → Automations & Scenes → Create Automation → Use Blueprint
 1. Include `homeassistant/configuration_helpers.yaml` in your Home Assistant configuration and reload helpers.
 2. Open the **Bed Presence Detector** dashboard → **Calibration Wizard** tab.
 3. Toggle **I confirm the bed is empty**, adjust the duration slider if needed, then press **Start Baseline**.
-4. Stay out of bed until the wizard step changes to **Finalizing**, then wait for the change-reason sensor to report `calibration:completed`.
-5. Review the updated baseline/time stamps in the status card. Use the **Reset Defaults** button if you need to roll back.
+4. Stay out of bed until the wizard step changes to **Finalizing**, then wait for the change-reason text sensor to report `calibration:completed`.
+5. Review the updated baseline/time stamps and distance window bounds in the status card. Use the **Reset Defaults** button if you need to roll back or temporarily widen the window for troubleshooting.
 
 ### Manual Service Invocation (Advanced)
 
@@ -196,14 +202,14 @@ See [calibration.md](calibration.md) for the detailed workflow plus the legacy s
 ### Test 3: Monitor State Transitions
 
 1. Developer Tools → States → Search "presence_state_reason"
-2. View `sensor.bed_presence_detector_presence_state_reason`:
+2. View `text_sensor.bed_presence_detector_presence_state_reason`:
    - Example: `PRESENT (z=12.34, high_conf_age=5000ms, abs_clear_ready=no)`
    - Watch state machine transitions in real-time
 
 ### Test 4: Inspect Change Reasons
 
 1. Developer Tools → States → Search "presence_change_reason"
-2. View `sensor.bed_presence_detector_presence_change_reason`:
+2. View `text_sensor.bed_presence_detector_presence_change_reason`:
    - Example values: `on:threshold_exceeded`, `off:abs_clear_delay`, `calibration:completed`
    - Confirms why the last state flip (or calibration event) occurred
 
@@ -234,7 +240,7 @@ All adjustments can be made in Home Assistant without reflashing firmware.
 - Hysteresis (k_on > k_off)
 - Runtime tunable thresholds
 
-**Phase 2** ✅ Deployed (Current):
+**Phase 2** ✅ Deployed:
 - 4-state machine (IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF)
 - Temporal filtering with configurable debounce timers
 - Absolute clear delay to prevent premature clearing
@@ -243,6 +249,11 @@ All adjustments can be made in Home Assistant without reflashing firmware.
 - Automated baseline calibration via ESPHome services (MAD statistics)
 - Distance windowing to ignore specific zones/noise sources
 - Presence change reason telemetry + reset services, plus guided HA calibration wizard
+
+**Phase 3.1+** 🛠️ In planning:
+- Persist calibration snapshots (μ/σ + metadata) so reboots do not lose context
+- Explore optional moving-energy fusion, restlessness scoring, or alerting once telemetry is stable
+- Add operational monitoring for calibration drift, sensor offline events, or repeated abs-clear delays
 
 ## Next Steps
 

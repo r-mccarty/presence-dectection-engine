@@ -1,8 +1,8 @@
 # Troubleshooting Guide
 
-**Current Status**: Phase 2 (State Machine + Debouncing) - Deployed and operational
+**Current Status**: Phase 3 (Automated Calibration + Hardening) - Deployed and operational; Phase 3.1+ persistence/analytics work is now in planning.
 
-This guide covers common issues and solutions for the bed presence detection system. The system uses a **3-phase architecture** with Phase 2 currently deployed.
+This guide covers common issues and solutions for the bed presence detection system. The system uses a **3-phase architecture** with Phase 3 currently live in production.
 
 ## System Architecture Overview
 
@@ -11,6 +11,8 @@ The presence detection engine uses:
 - **4-state machine** (IDLE → DEBOUNCING_ON → PRESENT → DEBOUNCING_OFF)
 - **Temporal filtering** with configurable debounce timers
 - **Hysteresis** to prevent rapid oscillation
+- **Distance window filtering** so only targets within `d_min`/`d_max` affect decisions
+- **Change-reason telemetry** so every transition/calibration advertises why it happened
 
 **Current Configuration**:
 - Baseline: μ=6.7%, σ=3.5% (empty bed)
@@ -19,6 +21,12 @@ The presence detection engine uses:
 - ON debounce: 3 seconds (sustained high signal required)
 - OFF debounce: 5 seconds (sustained low signal required)
 - Absolute clear delay: 30 seconds (prevents premature clearing)
+- Distance window: d_min=0 cm, d_max=600 cm (frames outside this range are ignored)
+
+## Phase 3.1+ Objectives (WIP)
+- Persist calibration snapshots (μ/σ results + metadata) for auditability and rollback
+- Layer in optional moving-energy fusion / restlessness analytics once telemetry stabilizes
+- Add operational monitoring for calibration drift, offline sensors, or repeated abs-clear delays
 
 ## Common Issues
 
@@ -43,6 +51,7 @@ The presence detection engine uses:
 - ON threshold (k_on) is too low
 - Environmental interference (nearby movement, fans, HVAC)
 - ON debounce timer too short
+- Distance window is too wide, allowing hallways/fans into the detection zone
 
 **Solutions**:
 1. **Recalibrate baseline**: Collect new baseline data with empty bed (see `docs/calibration.md`)
@@ -50,6 +59,7 @@ The presence detection engine uses:
 3. **Increase ON debounce timer**: Adjust `number.on_debounce_ms` to 5000 (5 seconds) to require longer sustained signal
 4. **Check environment**: Ensure no pets, fans, or movement in sensor range during calibration
 5. **Verify sensor position**: Sensor should point directly at bed, not at doorway or hallway
+6. **Tighten the distance window**: Raise `number.distance_min_cm` or lower `number.distance_max_cm` until only the mattress area is in range
 
 **Debug**: Monitor `text_sensor.presence_state_reason` to see real-time z-scores and state transitions. Z-scores should be near 0 when bed is empty.
 
@@ -62,6 +72,7 @@ The presence detection engine uses:
 - ON threshold (k_on) is too high
 - Sensor position doesn't have clear line of sight to occupant
 - Person lying very still (edge case)
+- Distance window excludes the occupant (d_min too high or d_max too low)
 
 **Solutions**:
 1. **Recalibrate baseline**: Collect new baseline data (current baseline may be incorrect)
@@ -69,6 +80,7 @@ The presence detection engine uses:
 3. **Verify sensor mounting**: Sensor should have unobstructed view of bed surface
 4. **Check raw sensor values**: Monitor `sensor.ld2410_still_energy` - should be significantly higher (>30%) when occupied
 5. **Adjust absolute clear delay**: If clearing too quickly when still, increase `number.abs_clear_delay_ms` to 60000 (60 seconds)
+6. **Widen the distance window**: Lower `number.distance_min_cm` or raise `number.distance_max_cm` until occupied readings show up reliably
 
 **Debug**:
 - Check `sensor.ld2410_still_energy` raw values (should be 30-70% when occupied, 3-10% when vacant)
@@ -106,7 +118,7 @@ The presence detection engine uses:
 
 **How it works**: The absolute clear delay requires BOTH low z-score AND 30+ seconds since last high confidence reading before clearing.
 
-### Sensor Still "Twitchy" After Phase 2 Upgrade
+### Sensor Still "Twitchy" After Phase 3 Upgrade
 
 **Symptoms**: Rapid state changes despite debounce timers
 
@@ -131,15 +143,19 @@ The presence detection engine uses:
 
 **Solutions**:
 1. **Verify ESPHome device is online**: Settings → Devices & Services → ESPHome → "Bed Presence Detector"
-2. **Check entity names**: Phase 2 entities should include:
+2. **Check entity names**: Phase 3 entities should include:
    - `binary_sensor.bed_occupied` (main presence sensor)
    - `text_sensor.presence_state_reason` (debug info with z-scores and state)
+   - `text_sensor.presence_change_reason` (why the last transition/calibration happened)
    - `sensor.ld2410_still_energy` (raw sensor reading)
+   - `sensor.ld2410_still_distance` (raw still distance, used for the window)
    - `number.k_on_on_threshold_multiplier` (ON threshold tuning)
    - `number.k_off_off_threshold_multiplier` (OFF threshold tuning)
    - `number.on_debounce_ms` (ON debounce timer)
    - `number.off_debounce_ms` (OFF debounce timer)
    - `number.abs_clear_delay_ms` (absolute clear delay timer)
+   - `number.distance_min_cm` (lower bound for valid targets)
+   - `number.distance_max_cm` (upper bound for valid targets)
 3. **Check Home Assistant logs**: Configuration → Logs → Filter for "bed_presence" or "bed_occupied"
 4. **Verify dashboard entity IDs match**: Edit dashboard YAML and ensure entity names match your device
 
@@ -196,7 +212,7 @@ PRESENT (z=12.34, high_conf_age=5000ms, abs_clear_ready=no)
 - Clearing: Should see DEBOUNCING_OFF → IDLE after 5 seconds + 30 second absolute delay
 
 For a one-line summary of why the last transition occurred, also watch
-`sensor.bed_presence_detector_presence_change_reason` (values like `on:threshold_exceeded`,
+`text_sensor.bed_presence_detector_presence_change_reason` (values like `on:threshold_exceeded`,
 `off:abs_clear_delay`, `calibration:completed`).
 
 ### ESPHome Logs
@@ -244,7 +260,9 @@ To verify threshold behavior:
 
 ## Phase-Specific Troubleshooting
 
-### Phase 2 (Current): State Machine + Debouncing
+### Phase 2 Recap: State Machine + Debouncing
+
+Even though Phase 3 is deployed, these checks help when the core state machine misbehaves.
 
 **Symptoms unique to Phase 2**:
 - States stuck in DEBOUNCING_ON or DEBOUNCING_OFF
@@ -257,12 +275,13 @@ To verify threshold behavior:
 3. Confirm signal is sustained above/below threshold for full debounce duration
 4. For clearing issues: Check `high_conf_age` exceeds `abs_clear_delay_ms` (30000ms default)
 
-### Phase 3 (Current): Automated Calibration
+### Phase 3 (Current): Automated Calibration + Distance Windowing
 
 **Features live in production firmware:**
 - `esphome.bed_presence_detector_calibrate_start_baseline` collects still-energy samples (duration_s > 0) within the configured distance window.
 - MAD statistics derive μ/σ; results are applied immediately and annotated via `Presence State Reason`.
 - `Presence Change Reason` reports `calibration:started`, `calibration:completed`, or `calibration:insufficient_samples`.
+- Distance windowing is runtime-tunable via `number.distance_min_cm` / `number.distance_max_cm`, filtering any frames outside `[d_min, d_max]`.
 - `esphome.bed_presence_detector_calibrate_reset_all` restores known-good defaults across all number entities.
 
 **Troubleshooting tips:**
@@ -275,7 +294,7 @@ To verify threshold behavior:
 
 ### Calibration History Persistence (Pending)
 
-**Status:** The guided Home Assistant wizard is live, but baseline snapshots are still volatile (lost on reboot unless recorded manually).
+**Status:** The guided Home Assistant wizard is live, but baseline snapshots are still volatile (lost on reboot unless recorded manually). (Tracked as a Phase 3.1+ objective.)
 
 **Issue:** μ/σ values derived during calibration only live in RAM. Operators who forget to note the `Last Calibration` timestamp or resulting statistics may lose traceability after a power cycle.
 
@@ -349,11 +368,11 @@ ssh ubuntu-node "cd ~/bed-presence-sensor && python3 scripts/collect_baseline.py
 **Status:**
 - ✅ Test framework functional
 - ✅ Phase 1/2/3 entity + service tests working
-- ⚠️ Calibration wizard helper tests skipped (UI still pending)
+- ⚠️ Calibration wizard helper tests skipped (UI exists but is not yet covered)
 
-**Impact:** Automated coverage does not exercise the future HA wizard. Device-side calibration remains fully tested.
+**Impact:** Automated coverage does not exercise the live HA wizard, so regressions in the helper/dashboard flow still require manual verification. Device-side calibration remains fully tested.
 
-**Workaround:** Continue using Developer Tools → Services or scripts until the wizard arrives.
+**Workaround:** Keep using the Home Assistant wizard for user workflows and rely on Developer Tools → Services or scripts for regression testing until the UI tests are implemented.
 
 ---
 
